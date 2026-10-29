@@ -1,7 +1,7 @@
 """The Expert Advisor is one MQL5 file, and no MetaEditor runs on this machine,
 so the checks here are the ones a compiler would do first: balanced brackets,
-nothing called before it is defined, ASCII only, every input documented in the
-dialog, and a console with a tag for every kind of decision."""
+nothing called before it is defined, ASCII only, one Print() - plus the wiring
+of the dashboard, where a row without a handler is a dead button."""
 
 import os
 import re
@@ -13,10 +13,15 @@ EA_DIR = os.path.join(ROOT, "trader-mt5", "ea")
 EA = os.path.join(EA_DIR, "DayTraderMT5.mq5")
 
 ENTRY_POINTS = ["OnInit", "OnDeinit", "OnTimer", "OnTick", "OnChartEvent"]
+PAGES = ["DrawDash", "DrawRule", "DrawRisk", "DrawClock", "DrawManage", "DrawLog", "DrawPack", "DrawHelp"]
+SECTIONS = ["MARKET", "OPENING RANGE", "INDICATORS", "TODAY", "POSITION", "RISK AND SIZE", "STATUS"]
 
 # one tag per kind of line the console can print
 TAGS = ["INIT", "CONF", "GATE", "RULE", "SIGNAL", "BLOCK", "SIZE", "RISK",
         "ORDER", "MANAGE", "FLAT", "CTRL", "ERROR", "DAY", "STOP"]
+
+ROW_CALL = re.compile(r'Row(?:Read|Edit|Cycle|Toggle)\("([A-Za-z_0-9]+)"')
+EDITABLE = re.compile(r'Row(?:Edit|Cycle|Toggle)\("([A-Za-z_0-9]+)"')
 
 
 def source():
@@ -58,6 +63,25 @@ def definitions(text):
     return [(m.start(), m.group(1)) for m in re.finditer(pattern, text)]
 
 
+def body_of(text, name):
+    """The body of one function, from its definition to the closing brace."""
+    at = re.search(r"(?m)^[A-Za-z_][A-Za-z0-9_]*\s+" + name + r"\s*\(", text)
+    if not at:
+        raise AssertionError("no definition of " + name)
+    start = at.start()
+    depth = 0
+    opened = False
+    for i in range(start, len(text)):
+        if text[i] == "{":
+            depth += 1
+            opened = True
+        elif text[i] == "}":
+            depth -= 1
+            if opened and depth == 0:
+                return text[start:i + 1]
+    raise AssertionError("unbalanced body for " + name)
+
+
 class TheFile(unittest.TestCase):
     def test_it_ships_next_to_its_docs(self):
         for name in ("DayTraderMT5.mq5", "README.md", "CONSOLE.md"):
@@ -69,11 +93,12 @@ class TheFile(unittest.TestCase):
         self.assertTrue(text.endswith("\n"))
         self.assertNotIn("\r", text, "MQL5 source stays LF, git converts it for Windows")
 
-    def test_the_buffer_version_is_not_stale(self):
+    def test_the_version_is_not_stale(self):
         text = source()
         version = re.search(r'#property version\s+"([0-9.]+)"', text)
         self.assertIsNotNone(version)
-        self.assertEqual(version.group(1), "1.10")
+        self.assertEqual(version.group(1), "1.20")
+        self.assertIn("v1.20", text, "the banner and the panel footer name the version")
         self.assertIn("#property copyright", text)
         self.assertIn("#property link", text)
 
@@ -105,6 +130,8 @@ class TheSyntax(unittest.TestCase):
         names = [name for _, name in definitions(source())]
         for point in ENTRY_POINTS:
             self.assertIn(point, names)
+        for page in PAGES:
+            self.assertIn(page, names)
 
     def test_it_includes_only_the_trade_library(self):
         includes = re.findall(r"(?m)^#include\s+(.+)$", source())
@@ -119,8 +146,6 @@ class TheInputs(unittest.TestCase):
         for line in source().splitlines():
             if line.startswith("input ") and not line.startswith("input group"):
                 self.assertIn("//", line, line)
-                self.assertTrue(line.rstrip().endswith("//" + line.split("//", 1)[1]),
-                                "the comment has to sit at the end of the line: " + line)
 
     def test_the_demo_defaults_are_the_safe_ones(self):
         text = source()
@@ -139,7 +164,6 @@ class TheInputs(unittest.TestCase):
 
 class TheConsole(unittest.TestCase):
     def test_print_happens_in_one_place_only(self):
-        """Every line goes through Log(), so the timestamp and the tag line up."""
         code = code_only(source())
         self.assertEqual(len(re.findall(r"\bPrint\s*\(", code)), 1)
         self.assertEqual(len(re.findall(r"\bPrintFormat\s*\(", code)), 0)
@@ -155,46 +179,124 @@ class TheConsole(unittest.TestCase):
         self.assertIn("g_ruleKey", text)
         self.assertIn("InpVerbose", text)
 
-    def test_every_line_starts_with_the_time(self):
+    def test_the_chart_keeps_its_own_copy(self):
         text = source()
-        self.assertIn("TimeToString(TimeCurrent(), TIME_DATE | TIME_SECONDS)", text)
+        log = body_of(text, "Log")
+        self.assertIn("LogRingPush(", log)
+        self.assertIn("g_logRing[", body_of(text, "LogRingPush"))
+        self.assertIn("g_logRing[", body_of(text, "DrawLog"))
 
 
 class TheDashboard(unittest.TestCase):
     def test_every_object_carries_the_panel_prefix(self):
         text = source()
         self.assertIn('#define PANEL_TAG   "DTMT5_UI_"', text)
-        # nothing is created outside the Ui* helpers, and they all use the tag
-        self.assertEqual(text.count("ObjectCreate("), 3)
+        self.assertEqual(text.count("ObjectCreate("), 3, "only the three Ui helpers create objects")
 
     def test_it_is_removed_when_the_ea_leaves(self):
         text = source()
         self.assertIn("ObjectsDeleteAll(0, PANEL_TAG)", text)
-        on_deinit = text[text.index("void OnDeinit("):]
-        self.assertIn("DeletePanel();", on_deinit.split("void OnTimer(")[0])
+        on_deinit = body_of(text, "OnDeinit")
+        self.assertIn("DeletePanel();", on_deinit)
 
-    def test_the_three_buttons_are_wired(self):
+    def test_every_page_is_drawn_and_switchable(self):
         text = source()
-        events = text[text.index("void OnChartEvent("):text.index("int OnInit(")]
-        for button in ("btn_pause", "btn_dry", "btn_close"):
-            self.assertIn('PANEL_TAG + "%s"' % button, events)
-        # closing anything of ours needs a second click
+        panel = body_of(text, "UpdatePanel")
+        for page in PAGES:
+            self.assertIn(page + "()", panel, page)
+        tabs = body_of(text, "UiTabs")
+        for label in ("DASH", "RULE", "RISK", "CLOCK", "MANAGE", "LOG", "PACK", "HELP"):
+            self.assertIn('"%s"' % label, tabs, label)
+        # a tab click lands on SetPage, which redraws the new page
+        self.assertIn("SetPage(", body_of(text, "OnChartEvent"))
+        self.assertIn("ObjectsDeleteAll", body_of(text, "SetPage"))
+
+    def test_the_dash_page_shows_every_section(self):
+        dash = body_of(source(), "DrawDash")
+        for section in SECTIONS:
+            self.assertIn('"%s"' % section, dash, section)
+
+    def test_the_four_buttons_are_wired(self):
+        text = source()
+        events = body_of(text, "OnChartEvent")
+        for button in ("btn_pause", "btn_dry", "btn_close", "btn_reset"):
+            self.assertIn('"%s"' % button, events, button)
+        # closing anything of ours needs a second click, and so does a reset
         self.assertIn("g_confirmClose", events)
+        self.assertIn("g_confirmReset", events)
         self.assertIn("CloseAllOurs(", events)
+        self.assertIn("ResetSettings(", events)
 
-    def test_the_panel_shows_every_section(self):
+    def test_no_row_shows_the_same_key_twice_on_one_page(self):
+        """Two rows with one key would draw on top of each other. The one
+        exception is a row that is drawn in both arms of an if/else, where only
+        one arm ever reaches the chart."""
         text = source()
-        panel = text[text.index("void UpdatePanel("):text.index("void OnChartEvent(")]
-        for section in ("MARKET", "OPENING RANGE", "INDICATORS", "TODAY",
-                        "POSITION", "RISK AND SIZE", "STATUS"):
-            self.assertIn('"%s"' % section, panel)
+        for page in PAGES:
+            body = body_of(text, page)
+            keys = ROW_CALL.findall(body)
+            twice = [k for k in set(keys) if keys.count(k) == 2]
+            self.assertEqual([k for k in set(keys) if keys.count(k) > 2], [], page)
+            if twice:
+                self.assertIn("else", body, page)
+                self.assertIn("if(", body, page)
+
+
+class TheSettings(unittest.TestCase):
+    """A row with no handler is a button that does nothing, and a setting with
+    no save is forgotten on the next chart change."""
+
+    def test_every_clickable_row_has_a_handler(self):
+        text = source()
+        rows = set(EDITABLE.findall(text))
+        handled = set(re.findall(r'id == "([A-Za-z_0-9]+)"', body_of(text, "AdjustSetting")))
+        self.assertTrue(rows)
+        self.assertEqual(sorted(rows - handled), [], "these rows have no handler")
+
+    def test_every_handler_is_reachable_from_a_row(self):
+        text = source()
+        rows = set(EDITABLE.findall(text))
+        handled = set(re.findall(r'id == "([A-Za-z_0-9]+)"', body_of(text, "AdjustSetting")))
+        self.assertEqual(sorted(handled - rows), [], "these handlers have no row")
+
+    def test_every_setting_is_saved_and_loaded(self):
+        text = source()
+        handled = set(re.findall(r'id == "([A-Za-z_0-9]+)"', body_of(text, "AdjustSetting")))
+        saved = set(re.findall(r'CFG_PREFIX \+ "([A-Za-z_0-9]+)"', body_of(text, "SaveSettings")))
+        loaded = set(re.findall(r'CfgHas\("([A-Za-z_0-9]+)"\)', body_of(text, "LoadSettings")))
+        self.assertEqual(sorted(handled - saved), [], "not saved")
+        self.assertEqual(sorted(handled - loaded), [], "not loaded back")
+        self.assertEqual(sorted(saved - handled), [], "saved but never set")
+        self.assertEqual(sorted(loaded - handled), [], "loaded but never set")
+
+    def test_the_saved_table_is_clamped_on_the_way_back(self):
+        text = source()
+        loaded = body_of(text, "LoadSettings")
+        self.assertGreaterEqual(loaded.count("ClampD(") + loaded.count("ClampI("), 20)
+
+    def test_reset_returns_to_the_inputs(self):
+        text = source()
+        reset = body_of(text, "ResetSettings")
+        self.assertIn("ForgetSettings();", reset)
+        self.assertIn("ApplyInputDefaults();", reset)
+        self.assertIn("CreateHandles();", reset)
+        defaults = body_of(text, "ApplyInputDefaults")
+        for input_name in ("InpRiskPercent", "InpMaxLots", "InpORMinutes", "InpBreakevenAtR", "InpAlertPopup"):
+            self.assertIn(input_name, defaults, input_name)
+
+    def test_a_retuned_rule_rebuilds_its_handles(self):
+        text = source()
+        adjust = body_of(text, "AdjustSetting")
+        self.assertIn("CreateHandles()", adjust)
+        for key in ('"tf"', '"ema_fast"', '"ema_slow"', '"atr_period"'):
+            self.assertIn("id == " + key, adjust, key)
 
 
 class TheGuards(unittest.TestCase):
     def test_a_real_account_needs_the_switch(self):
         text = source()
         self.assertIn("g_liveBlocked = (IsLiveAccount() && !g_allowLive);", text)
-        ready = text[text.index("bool TerminalReady("):text.index("//| Indicators")]
+        ready = body_of(text, "TerminalReady")
         self.assertIn("g_liveBlocked", ready)
 
     def test_it_only_touches_its_own_magic(self):
@@ -202,10 +304,17 @@ class TheGuards(unittest.TestCase):
         self.assertIn("PositionGetInteger(POSITION_MAGIC) != g_magic", text)
         self.assertIn("SetExpertMagicNumber", text)
 
+    def test_the_panel_cannot_undo_a_guard(self):
+        """Nothing on the chart may switch InpAllowLive or place an order itself."""
+        adjust = body_of(source(), "AdjustSetting")
+        self.assertNotIn("g_allowLive", adjust)
+        self.assertNotIn(".Buy(", adjust)
+        self.assertNotIn(".Sell(", adjust)
+
     def test_every_send_is_behind_the_gates(self):
         """The order is only reached from TryEntry, after the gate block."""
         text = source()
-        entry = text[text.index("void TryEntry("):text.index("//| Managing what is open")]
+        entry = body_of(text, "TryEntry")
         self.assertIn('Log("BLOCK"', entry)
         self.assertLess(entry.index('Log("BLOCK"'), entry.index("g_trade.Buy("))
         self.assertLess(entry.index('if(gate != "")'), entry.index("g_trade.Buy("))

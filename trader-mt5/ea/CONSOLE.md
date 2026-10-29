@@ -8,6 +8,12 @@ Ye file sirf `DayTraderMT5.mq5` ke bare mein hai. Do hisse hain:
 Dono ka ek hi maqsad: aapko har waqt pata ho ke EA ne kya dekha, kya socha,
 kya kiya, aur agar kuch nahi kiya to kyun nahi kiya.
 
+**v1.20:** dashboard ab 8 pages ka hai (DASH, RULE, RISK, CLOCK, MANAGE, LOG,
+PACK, HELP), aur har number chart par hi **click se badalta** hai: `[-]` `[+]`
+se number, `ON/OFF` se switch, `<` `>` se list. Jo aap click karte hain wo
+terminal ke global variables mein save ho jata hai, is liye chart band kar ke
+wapas kholen to bhi aap ki tuning barqarar rehti hai.
+
 Install steps `README.md` mein hain. Ye file sirf "kaunsi line ka kya matlab hai"
 aur "panel ke kis khaane ka kya matlab hai" ke liye hai.
 
@@ -124,6 +130,7 @@ Har line ek hi cheez batati hai: is waqt rule kis stage par hai.
 | `waiting: XAUUSD M5 closed 2391.20, inside the range (range 2388.10 - 2393.40, trend up)` | break nahi hua, trend up | intezar |
 | `waiting: ... closed 2394.00, above the range, but the trend filter disagrees` | break hua par EMA ulta | intezar; trend filter jaan boojh kar laga hai |
 | `waiting: ... closed 2385.00, below the range, but short entries are off (InpAllowShort)` | neeche break, par short band | chahein to `InpAllowShort = true` |
+| `opening range is 180 points, under the floor you set (250): no entries today` | range bohot tang hai, aap ne floor lagaya hua hai | RULE tab par `Range floor` kam karein yaa `off` |
 | `no bars from the terminal for XAUUSD M5` | terminal ne bars nahi diye | symbol Market Watch mein ho, chart par data aaye |
 | `the ATR is not ready yet` | chart mein itni history nahi | chart ko left tak scroll karein (F5 se refresh) |
 
@@ -248,6 +255,10 @@ band hai - aap kuch nahi kar sakte.
 | `CLOSE OURS armed for 6 seconds: 1 of our position(s) on XAUUSD will be closed on a second click` | pehla click, kuch nahi hua |
 | `CLOSE OURS confirmed by the second click` | doosra click, band kar diya |
 | `CLOSE OURS expired after 6 seconds: nothing was closed` (quiet) | waqt guzar gaya |
+| `setting risk_pct is now 0.50` | aap ne panel se koi number badla | jo chahiye tha, ho gaya |
+| `settings reset to the inputs (from the dashboard)` | RESET confirm kiya | sab inputs par wapas |
+| `3 setting(s) restored from what you set on the chart last time` | chart dobara khola, purani tuning wapas | kuch nahi, ye feature hai |
+| `the session ends cannot be the same minute: moved to ...` | start aur end ek hi waqt par aa gaye | khud theek kar diya |
 
 ---
 
@@ -266,211 +277,292 @@ inputs badle, `4` timeframe badla. `2` se `4` par EA dobara `INIT` banner deta h
 
 ---
 
-## 11. Dashboard: chart par panel
+## 11. Dashboard: chart par panel, 8 pages
 
 Panel chart objects se banta hai: koi DLL nahi, koi file nahi, koi resource nahi.
-Ek dafa banta hai, phir sirf text badalta hai. Isi liye ye chart ko slow nahi karta.
+Ek dafa banta hai, phir sirf text badalta hai, is liye chart slow nahi hota. Page
+badalne par purane page ke objects hata diye jate hain, naye ban jate hain.
 
 ```
 +----------------------------------------------------+
-| DayTraderMT5                              DEMO     |   <- header, account ka type
+| DayTraderMT5  the day at a glance          DEMO    |   header: naam, page, account type
++----------------------------------------------------+
+| [ DASH ] [ RULE ] [ RISK ] [ CLOCK ]               |   8 tabs, 2 rows, active tab neela
+| [ MANAGE ] [ LOG ] [ PACK ] [ HELP ]               |
 +----------------------------------------------------+
 | = MARKET                                           |
 |   Symbol / rule   XAUUSD  M5                       |
 |   New York        2026.10.29 14:05  EDT            |
 |   Session         03:05-19:00  OPEN                |
-|   [======================--------------]           |   <- session ka kitna hissa guzra
-| = OPENING RANGE                                    |
-|   High / low      2393.40  2388.10                 |
-|   Mid             2390.75                          |
-|   Width / bars    530 pts, 12 bars                 |
-| = INDICATORS                                       |
-|   EMA 50/200      2394.80  2380.10                 |
-|   Trend           up                               |
-|   ATR / spread    2.00  /  12 pts  (max 25)        |
-| = TODAY                                            |
-|   Entries         1 of 1                           |
-|   Realised        34.20 USD                        |
-|   Loss room       115.80 of 150.00                 |
-| = POSITION                                         |
-|   Ticket / side   #132889001  BUY                  |
-|   Lots / entry    0.42  @  2394.10                 |
-|   Stop / target   2387.40  2404.20                 |
-|   Progress        0.72R, 21.60 USD                 |
-|   [=============-----------------------]           |   <- 1R tak ka safar
-| = RISK AND SIZE                                    |
-|   Budget / trade  50.00 USD                        |
-|   Caps            2.00 lots, 40% margin, 1.50R     |
-| = STATUS                                           |
-|   Trading         yes                              |
-|   Mode            DEMO  1 open                     |
-|   Last            SIGNAL  BUY signal: M5 closed...  |
-|                                                    |
-|  [ PAUSE ]  [ DRY: OFF ]  [ CLOSE OURS ]           |
-| magic 20261019, quiet log, v1.10                   |
+|   [======================--------------]           |
+| = OPENING RANGE ...  (yahi 7 sections DASH par)    |
+| ...                                                |
+|  [ PAUSE ] [ DRY OFF ] [ CLOSE OUR ] [ RESET ]     |
+| v1.20  magic 20261019  quiet log                   |
 +----------------------------------------------------+
 ```
 
-### 11.1 Har khaane ka matlab
+Rang: **hara** = theek/nafa/on, **lal** = khatra/nuqsan/blocked, **peela** = dhyan
+dein (pause, dry run, range ban raha hai, quota poora), **bhoora** = sirf maloomat.
 
-| khaana | matlab | rang |
+### 11.1 Page DASH - aaj ka aina
+
+| section | rows |
+| --- | --- |
+| MARKET | symbol aur rule ka bar size, New York ka waqt (EDT/EST), session khula/band + progress bar |
+| OPENING RANGE | high / low, mid, width points aur bars (na bane to `still forming`) |
+| INDICATORS | EMA fast/slow ki value, trend (`up` / `down` / `filter off`), ATR aur spread (max ke sath) |
+| TODAY | entries / quota, realised P/L, loss room (`STOPPED for the day` jab khatam) |
+| POSITION | ticket aur side, lots aur entry, stop aur target, R mein progress + P/L + bar |
+| RISK AND SIZE | budget per trade, caps (lots, margin, R) |
+| STATUS | `Trading: yes` ya `no: <wajah>`, mode (DEMO/REAL/DRY/PAUSED + kitni open), last console line |
+
+### 11.2 Page RULE - rule ki har cheez click se badlein
+
+| row | click | step | hadd |
+| --- | --- | --- | --- |
+| Bar size | `<` `>` | M1, M5, M15, M30, H1 | - |
+| Fast EMA | `[-]` `[+]` | 5 | 2 se 400 |
+| Slow EMA | `[-]` `[+]` | 10 | 5 se 800 |
+| Trend filter | `ON/OFF` | - | - |
+| ATR period | `[-]` `[+]` | 1 | 2 se 50 |
+| Opening range | `[-]` `[+]` | 5 min | 5 se 240 |
+| Stop distance | `[-]` `[+]` | 0.1 ATR | 0.1 se 3.0 |
+| Range floor | `[-]` `[+]` | 10 points | 0 (off) se 5000 |
+| Reward:risk | `[-]` `[+]` | 0.1 | 1.0 se 5.0 |
+| Short side | `ON/OFF` | - | - |
+
+Neeche do read-only lines: **State** (rule is waqt kahan hai) aur **Next size**
+(abhi ke ATR par agla order kitne lots ka hoga).
+
+### 11.3 Page RISK - paisa
+
+| row | click | step | hadd |
+| --- | --- | --- | --- |
+| Risk per trade | `[-]` `[+]` | 0.25% | 0 se 10 |
+| or a fixed | `[-]` `[+]` | 10 | 0 se 1,000,000 |
+| Lot cap | `[-]` `[+]` | 0.1 | 0.01 se 500 |
+| Margin cap | `[-]` `[+]` | 5% | 5 se 100 |
+| Spread ceiling | `[-]` `[+]` | 5 points | 0 (off) se 1000 |
+| Daily loss stop | `[-]` `[+]` | 25 | 0 (off) se 1,000,000 |
+| Entries a day | `[-]` `[+]` | 1 | 1 se 20 |
+
+Read-only: budget per trade, free margin, equity, realised today, spread now.
+Percent aur fixed dono ho to **chhota** jeetta hai - yahi panel par `Budget per
+trade` mein dikhta hai.
+
+### 11.4 Page CLOCK - waqt
+
+| row | click | step |
 | --- | --- | --- |
-| header ka naam | panel EA ka hai | safaid |
-| header ka `DEMO` / `REAL` / `CONTEST` | account ka type | `DEMO` hara, `REAL` lal, `CONTEST` peela |
-| `Symbol / rule` | symbol aur rule ka timeframe (`InpTimeframe`, chart ka nahi) | - |
-| `New York` | New York ka waqt aur `EDT`/`EST`; `server` likha ho to `InpNewYorkTimes = false` | - |
-| `Session` | window aur `OPEN`/`closed` | khula hara, band bhoora |
-| session bar | window ka kitna hissa guzar gaya | neela |
-| `High / low` | aaj ke opening range ke do kinare; `still forming` ka matlab range ban raha hai | peela jab tak ban raha ho |
-| `Mid` | range ka beech; stop is se tight nahi hota | - |
-| `Width / bars` | range kitne points chaura, kis kitne bar se bana | - |
-| `EMA 50/200` | dono EMA ki abhi ki value (last closed bar) | - |
-| `Trend` | `up`, `down`, `flat` (aur `flat (no EMA yet)`) | up hara, down lal |
-| `ATR / spread` | ATR ki value, spread points mein, aur aap ki max | spread max se zyada ho to lal |
-| `Entries` | aaj ke entries / `InpMaxTradesPerDay` | quota poora ho to peela |
-| `Realised` | aaj ka band shuda nafa/nuqsan (commission aur swap ke sath) | nafa hara, nuqsan lal |
-| `Loss room` | daily loss stop tak kitni gunjaish bachi | khatam ho to lal, `STOPPED for the day` |
-| `Ticket / side` | apni khuli position, `#ticket  BUY/SELL` | BUY hara, SELL lal |
-| `Lots / entry` | volume aur entry price | - |
-| `Stop / target` | SL aur TP; `none` agar set nahi | - |
-| `Progress` | 1R ke hisaab se kitna chala, aur abhi ka P/L | R positive safaid, negative lal |
-| R bar | 1R tak ka safar (1R par bharta hai) | hara |
-| `Budget / trade` | `InpRiskPercent`/`InpRiskMoney` mein se jo chhota ho, rupees/dollar mein | - |
-| `Caps` | lot cap, margin cap, R multiple | - |
-| `Trading` | `yes`, ya wajah: `paused from the panel`, `dry run, nothing is sent`, `no: <wajah>` | yes hara, pause/dry peela, no lal |
-| `Mode` | account type + `LIVE BLOCKED` + `DRY` + `PAUSED` + kitni position khuli | LIVE BLOCKED lal |
-| `Last` | sabse aakhri console line (chhoti kar ke) | bhoora |
-| footer | magic number, log mode, version | bhoora |
+| Time base | `ON/OFF` | New York (DST ke sath) yaa server |
+| No entries before | `[-]` `[+]` | 5 min, 00:00-23:55 ghoomta hai |
+| No entries after | `[-]` `[+]` | 5 min |
+| Close everything | `[-]` `[+]` | 5 min |
+| Weekdays only | `ON/OFF` | - |
 
-`Trading` ka `no:` hissa wahi wajah hai jo `GATE` / `BLOCK` line mein aati hai,
-bas yahan hamesha nazar aati hai - scroll karne ki zaroorat nahi.
+Read-only: New York ka waqt, session OPEN/closed, flat-by kitne minute baad,
+aaj ke entries, server ka waqt. Start aur end ek hi minute par aa jayen to EA
+khud 60 minute ka farq kar deta hai aur console par likh deta hai.
 
-### 11.2 Teen button
+### 11.5 Page MANAGE - trade ka intezam, broker, alerts, log
 
-| button | pehla click | rang | kya band nahi hota |
+| row | click | step | hadd |
 | --- | --- | --- | --- |
-| `PAUSE` / `RESUME` | naye entries band/chalu | pause par peela | management, breakeven, trailing, flat-by - sab jari rehta hai |
-| `DRY: OFF` / `DRY: ON` | `InpDryRun` ko live badalta hai | on par peela | `InpAllowLive` ki deewar nahi hatti |
-| `CLOSE OURS` | sirf arm hota hai; 6 second ke andar doosra click band karta hai | armed par lal, `CONFIRM?` | doosri company ki ya haath se kholi trade ko chhoota nahi |
+| Stop to entry at | `[-]` `[+]` | 0.1R | 0 (off) se 5 |
+| Trail from | `[-]` `[+]` | 0.1R | 0 (off) se 5 |
+| Trail distance | `[-]` `[+]` | 10 points | 10 se 5000 |
+| Take part at | `[-]` `[+]` | 0.1R | 0 (off) se 5 |
+| Part size | `[-]` `[+]` | 5% | 10 se 90 |
+| Slippage allowed | `[-]` `[+]` | 5 points | 1 se 500 |
+| Stop buffer | `[-]` `[+]` | 5 points | 0 se 500 |
+| Popup alert / Sound / Push | `ON/OFF` | - | - |
+| Every bar (verbose) | `ON/OFF` | - | - |
 
-`CLOSE OURS` par do click kyun? Kyunki ek ghalti se poora din ka kaam band ho
-jana chahiye nahi. 6 second mein doosra click na aaye to kuch nahi hota, aur
-console par (quiet) line aati hai.
+Read-only: broker ka stops level (buffer ke sath), aur broker ka **last answer**
+(`done`, `10016`, `10009`...). Yeh wahi `g_lastRetcode` hai jo `ERROR` line mein aata hai.
 
-Button dabane par panel foran update hota hai - 5 second ka intezar nahi.
+### 11.6 Page LOG - console chart par
 
-### 11.3 Panel ko hataana / jagah badalna
+- **CONSOLE, NEWEST FIRST**: aakhri 8 lines, bilkul wahi jo `Experts` tab mein
+  hain, `time | TAG | baat` format mein. Naya line sabse upar aur safaid rang mein.
+- **JOURNAL TODAY**: aaj ke band trades, wins/losses, net (commission aur swap ke
+  sath), aakhri closed trade ka waqt aur nafa, aur kitni position khuli hai.
 
-- `InpShowPanel = false` - panel bilkul nahi banega.
-- `InpPanelX`, `InpPanelY` - pixels mein doori, left/top se. Chart ke doosre corner
-  mein chahiye to dono barha dein.
-- Panel `ChartRedraw` ke sath update hota hai: naya bar, har 5 second, aur har click.
+Log file kholne ki zaroorat nahi: chart par hi pata chal jata hai ke kya hua.
 
----
+### 11.7 Page PACK - poora day-trader pack, kaun hissa kahan
 
-## 12. Har input, ek ek
+| row | kya dikhata hai |
+| --- | --- |
+| scanner | is chart par opening range scan |
+| entry | range ke close ka break |
+| exit | stop aur target (aap ke numbers) |
+| risk | rule is waqt kahan hai (`waiting for a break`, `in a trade`, `done for the day`...) |
+| budget | agla order kitne lots / kitne points |
+| broker | broker ka last jawab |
+| alerts | alerts on/off |
+| mt5 desk | magic number aur account type |
+| news, analyst, pelosi, time machine | `dtcli ...`: ye Python side par hain, EA offline rehta hai |
 
-33 inputs, 7 groups. Dialog mein har input ke aage comment bhi likha hai.
+Aakhri line saaf likhti hai: **those read the web; the EA stays offline**. Yani
+jo cheez EA ke andar nahi hai, wo jhooti tarah andar dikhayi nahi jati.
 
-### Group: The gates
+### 11.8 Page HELP - kaise chalayein
+
+Chhota card: tabs, `[-]` `[+]`, `ON/OFF`, `<` `>`, save, RESET, chaar button ka
+matlab, aur safety (`REAL` ke liye `InpAllowLive`, apna magic, demo pehle).
+
+### 11.9 Chaar buttons (har page par neeche)
+
+| button | pehla click | doosra click | rang |
+| --- | --- | --- | --- |
+| `PAUSE` / `RESUME` | naye entries band / chalu | - | pause par peela |
+| `DRY OFF` / `DRY ON` | dry run on/off (live) | - | on par peela |
+| `CLOSE OUR` | arm (6 second) | band karta hai | armed par lal `SURE?` |
+| `RESET` | arm (6 second) | sab settings inputs par | armed par lal `SURE?` |
+
+`PAUSE` sirf naye entries rokta hai: breakeven, trailing, partial, flat-by sab
+chalte rehte hain. `RESET` poore panel ki tuning ko inputs par le jata hai (page
+ka nahi, sab ka) - is liye do click.
+
+### 11.10 Click badlav kahan save hota hai
+
+Har click par EA poora table `GlobalVariable` mein likhta hai:
+
+```
+DTMT5_C_risk_pct = 1.0      DTMT5_C_tf = 5        DTMT5_C_flat_by = 1255
+DTMT5_C_or_min   = 60        DTMT5_C_shorts = 0   ... 33 keys
+```
+
+Isi liye chart band karke wapas kholen, timeframe badlein, yaa terminal restart
+karein - aap ki tuning wapas milti hai (`CONF ... N setting(s) restored ...`).
+`RESET` in keys ko delete karta hai aur `Inputs` wale numbers wapas le aata hai.
+`InpShowPanel = false` panel ko poori tarah band karta hai; `InpPanelX/Y` us ki
+jagah badalte hain (pixels, left/top se).
+
+## 12. Har input, ek ek (39 inputs, 8 groups)
+
+Inputs factory settings hain. Panel se jo badla jata hai wo un ke upar chalta hai
+(aur save rehta hai); `RESET` sab inputs par wapas le aata hai.
+
+### The gates
 
 | input | default | matlab | kab badlein |
 | --- | --- | --- | --- |
-| `InpAllowLive` | `false` | REAL account par trade ki ijazat | sirf demo par tassalli ke baad |
-| `InpDryRun` | `false` | sirf log, order nahi | pehle din, ya test ke liye |
-| `InpMagic` | `20261019` | EA ki apni label | do EA ek chart par hon to alag |
+| `InpAllowLive` | `false` | REAL account par trade ki ijazat (panel se badal nahi sakte) | sirf demo par tassalli ke baad |
+| `InpDryRun` | `false` | sirf log, order nahi (panel ka `DRY` isi ko badalta hai) | pehle din |
+| `InpMagic` | `20261019` | EA ki apni label | do EA ek chart par hon |
 
-### Group: Risk and size
+### Risk and size (panel: RISK)
 
-| input | default | matlab | kab badlein |
-| --- | --- | --- | --- |
-| `InpRiskPercent` | `1.0` | equity ka %, per trade | account ke hisaab se |
-| `InpRiskMoney` | `50.0` | fixed amount, per trade | chhote account par |
-| `InpMaxLots` | `2.0` | ek order ka hard cap | bade account par |
-| `InpMaxMarginPct` | `40.0` | free margin ka max % | conservative rehne ke liye kam |
-| `InpMaxSpreadPoints` | `25.0` | is se zyada spread par entry nahi | symbol ke hisaab se (`0` = off) |
-| `InpMinRR` | `1.5` | target ka R | 1.0 se kam na karein |
+| input | default | matlab |
+| --- | --- | --- |
+| `InpRiskPercent` | `1.0` | equity ka %, per trade |
+| `InpRiskMoney` | `50.0` | yaa fixed amount (dono mein se chhota jeetta hai) |
+| `InpMaxLots` | `2.0` | ek order ka hard cap |
+| `InpMaxMarginPct` | `40.0` | free margin ka max % |
+| `InpMaxSpreadPoints` | `25.0` | is se zyada spread par entry nahi (`0` = off) |
+| `InpMinRR` | `1.5` | target ka R |
 
-Note: percent aur money dono `0` na hon; dono diye hon to **chhota** jeetta hai.
+### The rule (panel: RULE)
 
-### Group: The rule
+| input | default | matlab |
+| --- | --- | --- |
+| `InpTimeframe` | `M5` | rule ka bar size (panel se M1/H1 tak) |
+| `InpEmaFast` | `50` | tez EMA |
+| `InpEmaSlow` | `200` | slow EMA |
+| `InpUseTrend` | `true` | trend filter; off kar dein to sirf break chalta hai |
+| `InpAtrPeriod` | `14` | ATR ka period, stop isi se |
+| `InpORMinutes` | `60` | opening range ki lambai |
+| `InpAtrMult` | `0.5` | stop entry se kitne ATR peeche |
+| `InpMinRangePoints` | `0.0` | range itne points se tang ho to us din entry nahi (`0` = off) |
+| `InpAllowShort` | `false` | neeche break par sell bhi |
 
-| input | default | matlab | kab badlein |
-| --- | --- | --- | --- |
-| `InpTimeframe` | `M5` | rule ka timeframe | M1 (tez) ya M15 (kam signal) |
-| `InpEmaFast` | `50` | tez EMA | 20 for scalping |
-| `InpEmaSlow` | `200` | slow EMA | 100 for zyada signal |
-| `InpORMinutes` | `60` | opening range ki lambai | 30 for tez din |
-| `InpAtrMult` | `0.5` | ATR ka kitna hissa stop mein | 0.75 wide stop |
-| `InpAllowShort` | `false` | neeche break par sell | chahein to `true` |
+### The clock (panel: CLOCK) - New York waqt
 
-### Group: The clock (New York waqt)
+| input | default | matlab |
+| --- | --- | --- |
+| `InpNewYorkTimes` | `true` | neeche ke waqt NY mein (`false` = server) |
+| `InpSessionStart` | `03:05` | entry na karne ka waqt shuru |
+| `InpSessionEnd` | `19:00` | is ke baad entry nahi |
+| `InpFlatBy` | `20:55` | sab band |
+| `InpWeekdaysOnly` | `true` | Sat/Sun nahi |
+| `InpMaxTradesPerDay` | `1` | din ke entries |
+| `InpMaxDailyLoss` | `150.0` | din ka realised loss stop |
 
-| input | default | matlab | kab badlein |
-| --- | --- | --- | --- |
-| `InpNewYorkTimes` | `true` | neeche ke waqt NY mein | `false` = server time |
-| `InpSessionStart` | `03:05` | entry na karne ka waqt shuru | pre-market 04:00 chahiye to |
-| `InpSessionEnd` | `19:00` | is ke baad entry nahi | closing bell 16:00 |
-| `InpFlatBy` | `20:55` | sab band | 15:55 agar regular hours |
-| `InpWeekdaysOnly` | `true` | Sat/Sun nahi | off karne ki wajah nahi |
-| `InpMaxTradesPerDay` | `1` | din ke entries | 2-3 agar zyada chahiye |
-| `InpMaxDailyLoss` | `150.0` | din ka realised loss stop | apne account ka 1-3% |
+### Managing the trade (panel: MANAGE)
 
-### Group: Managing the trade
+| input | default | matlab |
+| --- | --- | --- |
+| `InpBreakevenAtR` | `1.0` | entry par stop (`0` = off) |
+| `InpTrailAtR` | `1.0` | trailing shuru (`0` = off) |
+| `InpTrailPoints` | `150` | trail ki doori, points |
+| `InpPartialAtR` | `0.0` | partial close ka R (`0` = off) |
+| `InpPartialPercent` | `50.0` | kitna % band |
 
-| input | default | matlab | kab badlein |
-| --- | --- | --- | --- |
-| `InpBreakevenAtR` | `1.0` | entry par stop | `0` = off |
-| `InpTrailAtR` | `1.0` | trailing shuru | `1.5` = late |
-| `InpTrailPoints` | `150` | trail ki doori (points) | symbol ke ATR ke hisaab se |
-| `InpPartialAtR` | `0.0` | partial close ka R | `2.0` = 2R par |
-| `InpPartialPercent` | `50.0` | kitna % band | 33 ya 50 |
+### Alerts (panel: MANAGE)
 
-### Group: Console and panel
+| input | default | matlab |
+| --- | --- | --- |
+| `InpAlertPopup` | `true` | `Alert()` popup: fill par aur close par |
+| `InpAlertSound` | `false` | `alert2.wav` |
+| `InpAlertPush` | `false` | phone par push (MetaQuotes ID chahiye) |
 
-| input | default | matlab | kab badlein |
-| --- | --- | --- | --- |
-| `InpShowPanel` | `true` | chart par dashboard | off agar chart saaf chahiye |
-| `InpPanelX` | `14` | left se doori | doosre corner ke liye |
-| `InpPanelY` | `24` | top se doori | wahi |
-| `InpVerbose` | `false` | har bar par RULE line | debugging ke din ke liye |
+Alert kya kehta hai: `DayTraderMT5: BUY XAUUSD 0.42 lots at 2394.35, stop 2387.40,
+target 2404.20` aur close par `DayTraderMT5: 1 position(s) closed on XAUUSD, ...`.
+Alerts entry ke waqt nahi, **fill** aur **close** par aate hain.
 
-### Group: Plumbing
+### Console and panel
 
-| input | default | matlab | kab badlein |
-| --- | --- | --- | --- |
-| `InpDeviationPoints` | `20` | slippage ki ijazat | fast market mein 30-40 |
-| `InpStopBufferPoints` | `10` | broker ki stops level ke upar buffer | `10016` aaye to 20-30 |
+| input | default | matlab |
+| --- | --- | --- |
+| `InpShowPanel` | `true` | dashboard on/off |
+| `InpPanelX` | `14` | left se doori, pixels |
+| `InpPanelY` | `24` | top se doori, pixels |
+| `InpVerbose` | `false` | har bar par RULE line (panel ka `Every bar`) |
 
----
+### Plumbing
+
+| input | default | matlab |
+| --- | --- | --- |
+| `InpDeviationPoints` | `20` | slippage ki ijazat |
+| `InpStopBufferPoints` | `10` | broker ki stops level ke upar buffer |
 
 ## 13. File ka naksha: kaun function kya karta hai
 
-`DayTraderMT5.mq5` ko 10 hisson mein parhein. Har hissa upar se neeche hai, aur
-MQL5 ka rule hai ke helper pehle, call baad mein.
+`DayTraderMT5.mq5` ko 12 hisson mein parhein. Har hissa upar se neeche hai, aur
+MQL5 ka rule hai ke helper pehle, call baad mein (compiler forward reference
+nahi manta).
 
 | hissa | functions | kaam |
 | --- | --- | --- |
 | Header | `#property` | version, copyright, link, description |
-| Inputs | 33 `input` | groups: gates, risk, rule, clock, manage, panel, plumbing |
-| Globals | `g_*` | inputs ki copy, handles, counters, panel cursor |
-| Console | `Log`, `LogRule`, `Clip`, `Money` | ek hi jagah se har line, tag ke sath |
-| Chhote helpers | `ParseHHMM`, `HHMM`, `MinutesOfDay`, `DayIndexOf`, `WeekdayOf`, `WeekdayOfMonth`, `PeriodDescription`, `RiskWords` | waqt aur text ki chhoti cheezein |
+| Inputs | 39 `input` | 8 groups: gates, risk, rule, clock, manage, alerts, panel, plumbing |
+| Globals | `g_*` | inputs ki live copy, handles, counters, page, panel cursor |
+| Console | `LogRingPush`, `Log`, `LogRule`, `Clip`, `Money` | ek hi jagah se har line, tag ke sath, aur chart ke liye ring buffer |
+| Chhote helpers | `ParseHHMM`, `HHMM`, `MinutesOfDay`, `DayIndexOf`, `WeekdayOf`, `WeekdayOfMonth`, `PeriodDescription`, `RiskWords` | waqt aur text |
 | Time | `ToNewYork`, `InWindow`, `PastTime` | server clock se New York, DST ke sath |
-| Gates | `IsLiveAccount`, `AccountModeWord`, `TerminalReady` | kya trading ki ijazat hai, aur nahi to kyun |
-| Data | `LoadRates`, `IndicatorValue`, `TrendUp`, `TrendDown`, `TrendWord`, `AtrValue`, `OpeningRange` | bars, EMA, ATR, opening range |
+| Gates | `IsLiveAccount`, `AccountModeWord`, `TerminalReady` | ijazat hai ya nahi, aur nahi to kyun |
+| Data | `LoadRates`, `IndicatorValue`, `TrendUp`, `TrendDown`, `TrendWord`, `AtrValue`, `CreateHandles`, `OpeningRange` | bars, EMA, ATR, opening range; `CreateHandles` panel se retune par dobara banata hai |
 | Hisaab | `CountEntriesToday`, `RealisedToday` | aaj ke entries aur P/L, account ki history se |
 | Sizing | `MoneyPerLotPerPrice`, `RiskBudget`, `FloorToStep`, `LadderFits`, `VolumeFits`, `MarginFits`, `SizeLots` | lots, broker ki ladder, margin |
-| Stops | `MinStopPoints`, `SpreadPoints` | broker ki kam se kam doori, spread |
-| Positions | `OurPositions`, `MarkName`, `Marked`, `Mark`, `PruneMarks` | siraf apni trades, breakeven/trail/partial ki yaaddasht |
-| Entry | `TryEntry` | 6 darwaze, stop, target, size, send |
+| Stops | `MinStopPoints`, `SpreadPoints` | kam se kam doori, spread |
+| Positions | `OurPositions`, `MarkName`, `Marked`, `Mark`, `PruneMarks` | sirf apni trades, aur un ki yaaddasht |
+| Settings | `ClampD`, `ClampI`, `WrapMinutes`, `Notify`, `SaveSettings`, `CfgHas`, `CfgGet`, `ApplyInputDefaults`, `LoadSettings`, `ForgetSettings`, `ResetSettings`, `AdjustSetting` | panel ke click, global variables mein save, inputs par reset, alerts |
+| Entry | `TryEntry` | darwaze, stop, target, size, send |
 | Manage | `ManagePositions`, `CloseAllOurs` | breakeven, trailing, partial, flat-by |
-| Dashboard | `DeletePanel`, `UiRect`, `UiText`, `UiButton`, `Clamp01`, `UiBar`, `UiSection`, `UiRow`, `NyWord`, `SessionFraction`, `OurPosition`, `UpdatePanel` | panel ke sab objects |
+| Widgets | `DeletePanel`, `UiRect`, `UiText`, `UiButton`, `Clamp01`, `UiBar`, `UiSection`, `UiLine`, `RowRead`, `RowEdit`, `RowCycle`, `RowToggle` | panel ke teen object types aur un ke rows |
+| Pages | `NyWord`, `SessionFraction`, `OurPosition`, `RuleStateWord`, `LotsPreview`, `JournalToday`, `UiHeader`, `UiTabs`, `UiActions`, `UiFooter`, `DrawDash`, `DrawRule`, `DrawRisk`, `DrawClock`, `DrawManage`, `DrawLog`, `DrawPack`, `DrawHelp`, `UpdatePanel`, `SetPage` | 8 pages, tabs, bottom bar, aur page badalna |
 | Entry points | `OnChartEvent`, `OnInit`, `OnDeinit`, `OnTimer`, `OnTick` | MT5 ke 5 callbacks |
 
 `OnTick` ka order hamesha yahi hai: **naya din check -> flat-by -> manage -> naye
 bar par rule -> panel**. Flat-by pehle kyun? Kyunki waqt guzar gaya to sabse pehle
 band karna hai, chahe rule kuch bhi kahe.
+
+`OnChartEvent` ka order: **tab click -> chaar buttons -> `[-]` `[+]` `<` `>` `ON/OFF` row**.
+Row ka naam `DTMT5_UI_b_<id>_<act>` hota hai, is liye ek hi handler 33 rows sambhal
+leta hai; `act` = `_dn`, `_up`, `_nx`, `_pv` yaa `_tg`.
 
 ---
 
@@ -484,15 +576,21 @@ band karna hai, chahe rule kuch bhi kahe.
 | `trading is not allowed yet: ...` panel par | wahi teen cheezein |
 | `no opening range yet` | thora waqt; chart par bars aa rahe hon |
 | `waiting: ... inside the range` | kuch nahi, rule ka kaam |
+| `opening range is ... under the floor you set` | RULE tab par `Range floor` kam ya off |
 | `BLOCK ... spread is 34 points` | news ke baad dobara; ya ceiling barhayein |
 | `BLOCK ... smallest lot risks more` | risk barhayein ya sasta symbol |
-| `ERROR ... 10016 invalid stops` | `InpStopBufferPoints = 20` |
+| `ERROR ... 10016 invalid stops` | MANAGE tab par `Stop buffer` 20-30 |
 | `ERROR ... 10019 no money` | lot/risk/margin cap kam |
 | `ERROR ... 10027` | algo trading on |
 | `ERROR ... 10018` | market band, kuch nahi |
 | kuch bhi nahi aa raha | `Journal` tab dekhein; EA attach hai? AutoTrading on? |
 | panel nahi dikh raha | `InpShowPanel`, ya `InpPanelX/Y` screen se bahar |
 | panel ke numbers purane lagte hain | 5 second ka timer, ya naya bar; F5 se chart refresh |
+| `[+]` dabaya par number wahi | hadd par pahunch gaya (har row ki hadd section 11 mein) |
+| `RESET` ne kuch nahi kiya | do click chahiye, 6 second ke andar |
+| setting badalne par purani wapas aa gayi | chart par save hota hai; `RESET` se inputs wapas |
+| `SURE?` 6 second baad gayab | confirm nahi hua, dobara click karein |
+| `send notification` ka error | `alert_push` off kar dein, ya MetaQuotes ID set karein |
 
 ---
 

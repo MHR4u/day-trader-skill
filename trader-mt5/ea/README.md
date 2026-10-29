@@ -82,7 +82,9 @@ until you set `InpAllowLive = true`, on purpose, and it says so in the log.
 | `InpMaxLots` | `2.0` | Hard cap on volume. |
 | `InpMaxSpreadPoints` | `25` | Skip the entry when the spread is wider. `0` turns it off. |
 | `InpMinRR` | `1.5` | Reward:risk the target is built from. |
-| `InpTimeframe` | `M5` | Chart timeframe the rule reads. It can differ from the chart you attach it to. |
+| `InpTimeframe` | `M5` | Bar size the rule reads. It can differ from the chart you attach it to. |
+| `InpUseTrend` | `true` | The EMA filter. Off means the break alone decides. |
+| `InpAtrPeriod` | `14` | ATR period behind the stop. |
 | `InpORMinutes` | `60` | Length of the opening range. |
 | `InpAtrMult` | `0.5` | ATR multiple behind the entry for the stop. |
 | `InpAllowShort` | `false` | Downside breaks too. Off by default. |
@@ -94,22 +96,45 @@ until you set `InpAllowLive = true`, on purpose, and it says so in the log.
 | `InpTrailAtR` | `1.0` | Start trailing here. `0` is off. |
 | `InpTrailPoints` | `150` | Trail distance, in points. |
 | `InpPartialAtR` / `InpPartialPercent` | `0` / `50` | Take part of the position at an R. Off by default. |
+| `InpMinRangePoints` | `0` | Skip the day when the opening range is narrower than this. `0` is off. |
+| `InpAlertPopup` / `InpAlertSound` / `InpAlertPush` | `true` / `false` / `false` | Alert on a fill and on a close: popup, sound, phone. |
 
 Every input has a one-line comment next to it in MetaTrader's input dialog, so
 you do not have to come back to this table.
 
-## What you will see
+## The dashboard: eight pages, every number one click
 
-**On the chart, a dashboard.** Seven sections, every number the rule used:
-market and the New York clock, the opening range, the EMAs, the ATR and the
-spread, today's entries and realised profit, the open position with its stop,
-target and progress in R, the risk budget, and the one line that matters:
-`trading: yes`, or `trading: no, <the exact switch that is missing>`. Three
-buttons sit at the bottom: `PAUSE` (stops new entries, management keeps
-running), `DRY` (toggles signal-only mode live) and `CLOSE OURS` (two clicks,
-six seconds, closes only its own positions).
+Attach the EA and the chart gets a dashboard. It is drawn with chart objects, so
+there is nothing to install, no DLL, no file. Eight tabs, two rows of four:
 
-**In the Toolbox, `Experts` tab, a tagged console.** Every line is
+| page | what is on it |
+| --- | --- |
+| `DASH` | the day at a glance: market and the New York clock, the opening range, the EMAs, the ATR and spread, today, the open position with its R progress, the risk budget, and `Trading: yes` or `no: <the switch>` |
+| `RULE` | bar size, both EMA periods, the trend filter, the ATR period, the opening-range length, the stop multiple, the range floor, the reward:risk, the short side - all clickable |
+| `RISK` | risk percent or fixed amount, lot cap, margin cap, spread ceiling, daily loss stop, entries a day - plus budget, free margin, equity and spread right now |
+| `CLOCK` | the New York switch, session start and end, flat-by, weekdays only - plus what time it is there and how long until flat-by |
+| `MANAGE` | breakeven, trailing, partial, slippage, stop buffer, the three alert switches, and the verbose log |
+| `LOG` | the last eight console lines, on the chart, and today's journal: closed trades, wins/losses, net, the last one |
+| `PACK` | every skill in the pack, and honestly: what lives inside this EA and what stays in the Python desk |
+| `HELP` | how the panel works, what the four buttons do, and the safety lines |
+
+**Every row with buttons is live.** `[-]` and `[+]` move a number by the step in
+`trader-mt5/ea/CONSOLE.md`, `<` and `>` walk a short list (the bar size), and
+`ON/OFF` flips a switch. A click is written to the terminal's global variables
+(`DTMT5_C_<name>`), so changing the chart, the timeframe or restarting the
+terminal keeps your tuning; `RESET` puts the inputs back.
+
+The four buttons at the bottom:
+
+- **PAUSE / RESUME**: no new entries. Management, breakeven, trailing and the
+  flat-by close keep running.
+- **DRY OFF / DRY ON**: signal-only mode, live, without touching the inputs.
+- **CLOSE OUR**: two clicks within six seconds, and only on its own magic number.
+- **RESET**: two clicks, and every setting goes back to the inputs.
+
+### The console
+
+Every decision is one tagged line in the Toolbox, `Experts` tab, in the shape
 `time | TAG | what happened`:
 
 ```
@@ -120,13 +145,14 @@ six seconds, closes only its own positions).
 2026.10.29 14:05:33 | SIZE  | 0.42 lots, stop 2387.40 (670 points, ATR 2.00 x 0.50), target 2404.20 (1.50R)
 2026.10.29 14:05:33 | ORDER | accepted: order #132889001, deal #241112233 at 2394.35, 0.42 lots
 2026.10.29 15:12:10 | MANAGE | #132889001: stop to the entry 2394.10 at 1.02R
+2026.10.29 15:12:11 | CTRL  | setting trail_r is now 1.50
 ```
 
 Fifteen tags in all (`INIT, CONF, GATE, RULE, SIGNAL, BLOCK, SIZE, RISK, ORDER,
-MANAGE, FLAT, CTRL, ERROR, DAY, STOP`), and every one of them, every message it
-can print, and every field on the dashboard is explained in
-[CONSOLE.md](CONSOLE.md). Nothing prints on every tick, so the log stays
-readable; `InpVerbose` makes the rule speak on every bar when you are debugging.
+MANAGE, FLAT, CTRL, ERROR, DAY, STOP`). A `BLOCK` line always names the single
+gate that stopped the order, so "why did it not trade" is one line, not a hunt.
+Every message, every panel field, every row's step and every input is in
+[CONSOLE.md](CONSOLE.md).
 
 ## When nothing happens
 

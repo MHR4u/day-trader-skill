@@ -64,12 +64,19 @@ khud trade karta hai, aap ko har order par "yes" nahi dena parta.
    `Tools > Options > Expert Advisors > Allow algorithmic trading` ON.
 4. **M5 chart** kholein (jo symbol trade karna hai), Navigator se
    `DayTraderMT5` chart par drag karein, `Allow algorithmic trading` tick karein.
-5. Chart par dashboard (safed/neela panel) aata hai: symbol, New York ka waqt,
-   session khula ya band, opening range, EMA, ATR, spread, aaj ke entries,
-   realised P/L, khuli trade ka stop/target/R, risk budget, aur sabse aakhir
-   mein `Trading: yes` ya `no: <wajah>`. Neeche teen button hain:
-   `PAUSE` (naye trade band), `DRY` (sirf signal), `CLOSE OURS` (do click mein
-   apni trade band).
+5. Chart par dashboard (gehra neela panel) aata hai, 8 pages ke sath:
+   `DASH` (symbol, New York waqt, session, opening range, EMA, ATR, spread,
+   aaj ke entries, realised P/L, khuli trade ka stop/target/R, risk, aur
+   `Trading: yes` ya `no: <wajah>`), `RULE`, `RISK`, `CLOCK`, `MANAGE`,
+   `LOG`, `PACK`, `HELP`.
+   - Har number chart par hi **click se badalta** hai: `[-]` `[+]` se number,
+     `ON/OFF` se switch, `<` `>` se bar size. Jo aap set karte hain wo save
+     rehta hai (chart band karke wapas kholen to bhi).
+   - Neeche chaar button: `PAUSE` (naye trade band), `DRY OFF/ON` (sirf signal),
+     `CLOSE OUR` (do click mein apni trade band), `RESET` (do click, sab
+     inputs par wapas).
+   - `LOG` page par aakhri 8 console lines aur aaj ka journal chart par hi
+     dikhta hai.
 6. `Toolbox > Experts` tab mein har faisla ek line mein aata hai, tag ke sath:
    `time | TAG | baat`, jaise
    `14:05:33 | SIGNAL | BUY signal: M5 closed 2394.12, above the range ...`,
