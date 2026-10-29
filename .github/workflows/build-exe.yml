@@ -1,7 +1,8 @@
 name: build-exe
 
-# Builds the single-file dtcli.exe on a real Windows machine. PyInstaller
-# cannot cross compile, so this is where the Windows binary comes from.
+# Builds the single-file dtcli.exe on a real Windows machine (PyInstaller
+# cannot cross compile), runs the suite there too, and keeps the log so a
+# Windows-only failure can be read without a login.
 on:
   push:
     branches: ["main", "arena/**"]
@@ -27,8 +28,22 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pyinstaller MetaTrader5
 
-      - name: The suite still passes on Windows
-        run: python -m unittest discover -s tests
+      - name: The suite on Windows (the log is uploaded either way)
+        shell: bash
+        run: |
+          python -m unittest discover -s tests -v > test-log.txt 2>&1 || echo "TESTS_FAILED" > tests-failed.txt
+          tail -40 test-log.txt
+
+      - name: What failed, if anything
+        if: always()
+        shell: bash
+        run: |
+          if [ -f tests-failed.txt ]; then
+            echo "::error::the suite failed on Windows; see test-log.txt in the artifacts"
+            grep -E "^(FAIL|ERROR):" test-log.txt || true
+          else
+            echo "the suite passed on Windows"
+          fi
 
       - name: Build dtcli.exe
         run: pyinstaller --clean --noconfirm trader-mt5/daytrader.spec
@@ -44,7 +59,16 @@ jobs:
           dist\dtcli.exe ticket --help
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: dtcli-windows
-          path: dist/dtcli.exe
-          if-no-files-found: error
+          path: |
+            dist/dtcli.exe
+            test-log.txt
+          if-no-files-found: warn
+
+      - name: Fail the job if the suite failed
+        if: always()
+        shell: bash
+        run: |
+          if [ -f tests-failed.txt ]; then exit 1; fi

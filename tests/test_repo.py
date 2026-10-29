@@ -21,7 +21,7 @@ V1_ONLY = ["trader-copycat", "trader-screener", "trader-tax", "trader-rebalance"
 def frontmatter(path):
     with open(path, encoding="utf-8") as fh:
         text = fh.read()
-    m = re.match(r"^---\n(.*?)\n---\n", text, re.S)
+    m = re.match(r"^---\r?\n(.*?)\r?\n---\r?\n", text, re.S)
     return (m.group(1) if m else ""), text
 
 
@@ -41,8 +41,8 @@ class Repo(unittest.TestCase):
 
     def test_root_matches_the_reel(self):
         root = sorted(d for d in os.listdir(ROOT) if d not in (".git",))
-        self.assertEqual(root, sorted([".claude-plugin", ".github", ".gitignore", "LICENSE", "README.md",
-                                       "tests"] + SKILLS))
+        self.assertEqual(root, sorted([".claude-plugin", ".gitattributes", ".github", ".gitignore", "LICENSE",
+                                       "README.md", "tests"] + SKILLS))
 
     def test_frontmatter_name_and_description(self):
         for s in SKILLS:

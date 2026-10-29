@@ -134,7 +134,18 @@ def environment():
     return "\n".join(lines)
 
 
+def console():
+    """Windows consoles are cp1252 by default; a stray arrow must not crash a
+    trade report. Ask for UTF-8 and never raise on an unprintable character."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError, OSError):
+            pass                       # a StringIO, or a stream that cannot change
+
+
 def main(argv=None):
+    console()
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv or argv[0] in ("-h", "--help", "help", "list"):
         print(usage())

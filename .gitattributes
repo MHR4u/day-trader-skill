@@ -1,0 +1,10 @@
+# one checkout, the same bytes, everywhere: the tests compare text
+* text=auto eol=lf
+
+# Windows batch files want CRLF, and the browser wants them that way too
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+*.png binary
+*.zip binary
+*.exe binary
