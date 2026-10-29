@@ -111,7 +111,7 @@ Click Trading buttons stay visible; move it with `InpPanelX` / `InpPanelY`:
 
 | page | what is on it |
 | --- | --- |
-| `DASH` | the day at a glance: market and the New York clock, the opening range, the EMAs, the ATR and spread, today, the open position with its R progress, the risk budget, and `Trading: yes` or `no: <the switch>` |
+| `DASH` | the day at a glance: market and the New York clock, the opening range, the EMAs, the ATR and spread, today, the open position with its R progress, the risk budget, `Trading: yes` or `no: <the switch>`, and the line that answers "why is it not trading": `next: long: a M5 close above 2412.30 (shorts off)` |
 | `RULE` | bar size, both EMA periods, the trend filter, the ATR period, the opening-range length, the stop multiple, the range floor, the reward:risk, the short side - all clickable |
 | `RISK` | risk percent or fixed amount, lot cap, margin cap, spread ceiling, daily loss stop, entries a day - plus budget, free margin, equity and spread right now |
 | `CLOCK` | the New York switch, session start and end, flat-by, weekdays only - plus what time it is there and how long until flat-by |

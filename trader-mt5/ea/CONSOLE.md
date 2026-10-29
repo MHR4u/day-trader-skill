@@ -8,7 +8,7 @@ Ye file sirf `DayTraderMT5.mq5` ke bare mein hai. Do hisse hain:
 Dono ka ek hi maqsad: aapko har waqt pata ho ke EA ne kya dekha, kya socha,
 kya kiya, aur agar kuch nahi kiya to kyun nahi kiya.
 
-**v1.22:** dashboard 9 pages ka hai (DASH, RULE, RISK, CLOCK, MANAGE, LOG,
+**v1.23:** dashboard 9 pages ka hai (DASH, RULE, RISK, CLOCK, MANAGE, LOG,
 TEST, PACK, HELP), aur har number chart par hi **click se badalta** hai: `[-]`
 `[+]` se number, `ON/OFF` se switch, `<` `>` se list. Jo aap click karte hain wo
 terminal ke global variables mein save ho jata hai, is liye chart band kar ke
@@ -91,7 +91,7 @@ function ke andar, is liye har line ka format ek jaisa hai.
 
 ```
 2026.10.29 13:58:02 | INIT  | -------------------------------------------------------------
-2026.10.29 13:58:02 | INIT  | DayTraderMT5 v1.22 on XAUUSD M5, account DEMO #5001234, magic 20261019
+2026.10.29 13:58:02 | INIT  | DayTraderMT5 v1.23 on XAUUSD M5, account DEMO #5001234, magic 20261019
 2026.10.29 13:58:02 | INIT  | -------------------------------------------------------------
 2026.10.29 13:58:02 | CONF  | rule      : M5 bars, EMA 50/200, opening range 60 min, long only
 2026.10.29 13:58:02 | CONF  | stops     : 0.50 ATR behind the entry or the range mid, target 1.50R
@@ -306,7 +306,7 @@ badalne par purane page ke objects hata diye jate hain, naye ban jate hain.
 | = OPENING RANGE ...  (yahi 7 sections DASH par)    |
 | ...                                                |
 |  [ PAUSE ] [ DRY OFF ] [ CLOSE OUR ] [ RESET ]     |
-| v1.22  magic 20261019  quiet log                   |
+| v1.23  magic 20261019  quiet log                   |
 +----------------------------------------------------+
 ```
 
@@ -317,7 +317,7 @@ dein (pause, dry run, range ban raha hai, quota poora), **bhoora** = sirf maloom
 
 | section | rows |
 | --- | --- |
-| MARKET | symbol aur rule ka bar size, New York ka waqt (EDT/EST), session khula/band + progress bar |
+| MARKET | symbol aur rule ka bar size, New York ka waqt (EDT/EST), session khula/band + progress bar, aur **`next:`** line - wahi ek jumla jo batata hai ab trade kyun nahi hui (neeche section 17) |
 | OPENING RANGE | high / low, mid, width points aur bars (na bane to `still forming`) |
 | INDICATORS | EMA fast/slow ki value, trend (`up` / `down` / `filter off`), ATR aur spread (max ke sath) |
 | TODAY | entries / quota, realised P/L, loss room (`STOPPED for the day` jab khatam) |
@@ -404,7 +404,9 @@ Log file kholne ki zaroorat nahi: chart par hi pata chal jata hai ke kya hua.
 
 Yeh page do sawalon ka jawab deta hai, dono **koi order bheje baghair**.
 
-**CAN IT TRADE RIGHT NOW?** - 11 gates, ek ek, `PASS` (hara) yaa `NO: <wajah>` (lal):
+Pehle do line **rule ki haalat** par: `waiting for a break` jaisa state, aur `next:` -
+yani kis price par entry trigger hogi. Phir **CAN IT TRADE RIGHT NOW?** - 11 gates, ek ek,
+`PASS` (hara) yaa `NO: <wajah>` (lal):
 
 | # | gate | PASS kab |
 | --- | --- | --- |
@@ -719,7 +721,43 @@ qabool hoga ya nahi - bhejta kuch nahi.
 
 ---
 
-## 17. Yaad rakhein
+## 17. Trade kyun nahi le raha? Das second ka check
+
+Sab se pehle **DASH page ki `next:` line** dekhein. Wo jumla hi jawab hai. Iske
+mutabiq:
+
+| `next:` line | matlab | kya karein |
+| --- | --- | --- |
+| `weekend: entries resume on Monday` | New York mein Sat/Sun | somwar ka intezar, ya `Weekdays only` off |
+| `closed until 03:05 New York` | session ke bahar | CLOCK page se `Session start` badlein |
+| `past flat-by 20:55: entries resume tomorrow` | din khatam | kal |
+| `range still forming, ready by 04:05` | aaj ki opening range abhi bani nahi | intezar; CLOCK page se `Opening range` kam karein |
+| `long: a M5 close above 2412.30 (shorts off)` | price range ke andar hai | intezar; ya RULE page se `Short entries` on |
+| `close above 2412.30 but the trend is down` | break hai, EMA filter khilaaf | RULE page par `Trend filter` off, ya intezar |
+| `a signal would be blocked: spread 34 over 25` | spread ceiling tight hai (gold par aam) | RULE page > `Max spread` 40-60, ya 0 (off) |
+| `done for the day (1 of 1)` | aaj ki entry ho gayi | kal; `Entries per day` barha sakte hain |
+| `daily loss stop: no more entries today` | aaj ka loss limit hit | kal; RISK page par limit dekh lein |
+| `in a trade: stop and target are live` | position khuli hai | MANAGE page |
+| `paused by you: press RESUME` | aap ne PAUSE dabaya tha | PAUSE dobara dabayein |
+
+Agar `next:` line range break kehti hai (yani sab tayyar hai) par order phir bhi
+nahi jata, to log mein **`BLOCK`** line dekhein - wahan ek hi gate ka naam hota
+hai. Uske ilawa **TEST page** ke 11 gates hamesha sach batate hain; sab se aam
+teen:
+
+1. **REAL account aur `InpAllowLive = false`** - EA jaan boojh kar band hai.
+2. **Terminal ka AutoTrading button off** (toolbar ka bara button).
+3. **`Tools > Options > Expert Advisors > Allow algorithmic trading`** off.
+
+Aur yaad rakhein rule kaise chalta hai: EA **har naye M5 bar par** ek dafa
+dekhta hai (tick par nahi), default **din mein ek entry**, default **sirf long**,
+aur entry sirf tab jab **band (closed) bar** range se bahar close kare. Is liye
+"abhi tak kuch nahi hua" aksar sahi behaviour hota hai - aur `next:` line us
+waqt bhi batati rehti hai ke kis price ka intezar hai.
+
+---
+
+## 18. Yaad rakhein
 
 - Ye **financial advice nahi** hai. Zyada tar day traders paisa kho dete hain.
 - Demo par pehle. REAL account `InpAllowLive = true` ke bagair band rehta hai.

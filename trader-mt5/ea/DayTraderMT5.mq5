@@ -33,7 +33,7 @@
 //+------------------------------------------------------------------+
 #property copyright "day-trader-skill, MIT"
 #property link      "https://github.com/MHR4u/day-trader-skill"
-#property version   "1.22"
+#property version   "1.23"
 #property description "Trend-filtered opening-range breakout with ATR stop, R target, risk-percent sizing,"
 #property description "spread and stops-level gates, one trade a day, a daily loss stop, breakeven, trailing,"
 #property description "partial take-profit and a flat-by time. Demo by default: a REAL account needs InpAllowLive."
@@ -2032,6 +2032,55 @@ string RuleStateWord()
    return "waiting for a break";
 }
 
+// the one sentence that answers "why is it not trading": what has to happen
+// next, in prices, not in adjectives
+string NextTrigger()
+{
+   datetime nyNow = ToNewYork(TimeCurrent());
+   int minutes = MinutesOfDay(nyNow);
+
+   if(g_weekdaysOnly && (WeekdayOf(nyNow) == 0 || WeekdayOf(nyNow) == 6))
+      return "weekend: entries resume on Monday";
+   if(PastTime(minutes, g_flatBy))
+      return "past flat-by " + HHMM(g_flatBy) + ": entries resume tomorrow";
+   if(!InWindow(minutes, g_sessionStart, g_sessionEnd))
+      return "closed until " + HHMM(g_sessionStart) + " New York";
+   if(g_paused)
+      return "paused by you: press RESUME";
+   if(OurPositions() > 0)
+      return "in a trade: stop and target are live";
+   if(g_maxDailyLoss > 0.0 && RealisedToday() <= -g_maxDailyLoss)
+      return "daily loss stop: no more entries today";
+   if(CountEntriesToday() >= g_maxTrades)
+      return "done for the day (" + IntegerToString(CountEntriesToday()) + " of " +
+             IntegerToString(g_maxTrades) + ")";
+
+   double high = 0.0, low = 0.0, mid = 0.0;
+   int bars = 0;
+   if(!OpeningRange(high, low, mid, bars))
+      return "range still forming, ready by " + HHMM(g_sessionStart + g_orMinutes);
+   if(minutes < g_sessionStart + g_orMinutes)
+      return "range closes at " + HHMM(g_sessionStart + g_orMinutes) + ", then a break counts";
+
+   MqlRates rates[];
+   if(!LoadRates(10, rates))
+      return "no bars yet for " + PeriodDescription(g_tf);
+
+   string text = "long: a " + PeriodDescription(g_tf) + " close above " + DoubleToString(high, _Digits);
+   if(g_shorts)
+      text += ", short: below " + DoubleToString(low, _Digits);
+   else
+      text += " (shorts off)";
+
+   double last = rates[1].close;
+   if(g_useTrend && last > high && !TrendUp())
+      text = "close above " + DoubleToString(high, _Digits) + " but the trend is " + TrendWord();
+   if(g_spreadMax > 0.0 && SpreadPoints() > g_spreadMax)
+      text = "a signal would be blocked: spread " + DoubleToString(SpreadPoints(), 0) + " over " +
+             DoubleToString(g_spreadMax, 0);
+   return text;
+}
+
 // a line every InpHeartbeatMinutes, so you can see it is awake and watching
 // even on a quiet day; quiet, so it never replaces the last event on the panel
 void Heartbeat()
@@ -2044,8 +2093,8 @@ void Heartbeat()
    string firstFail = "";
    int open = GatesOpen(firstFail);
    string tail = (firstFail == "" ? "every gate is open" : "first closed gate: " + firstFail);
-   Log("ALIVE", StringFormat("%s %s, %s, %d of 11 gates open (%s), %s",
-                             _Symbol, PeriodDescription(g_tf), RuleStateWord(), open, tail,
+   Log("ALIVE", StringFormat("%s %s, %s. %s. %d of 11 gates open, %s. %s.",
+                             _Symbol, PeriodDescription(g_tf), RuleStateWord(), NextTrigger(), open, tail,
                              (OurPositions() > 0 ? "a position is open" : "flat")), true);
 }
 
@@ -2160,7 +2209,7 @@ void UiActions()
 
 void UiFooter()
 {
-   string foot = "v1.22  magic " + IntegerToString(g_magic) + "  " + (g_verbose ? "verbose" : "quiet") + " log";
+   string foot = "v1.23  magic " + IntegerToString(g_magic) + "  " + (g_verbose ? "verbose" : "quiet") + " log";
    UiText(PANEL_TAG + "foot", g_uiX + PANEL_PAD, g_uiY, foot, CLR_LABEL, 7, "Segoe UI",
           ANCHOR_LEFT_UPPER);
    g_uiY += 12;
@@ -2193,6 +2242,7 @@ void DrawDash()
    RowRead("mkt_ses", "Session", HHMM(g_sessionStart) + "-" + HHMM(g_sessionEnd) + "  " +
            (inSession ? "OPEN" : "closed"), inSession ? CLR_GOOD : CLR_LABEL);
    UiBar("ses", g_uiX + 132, g_uiY - 4, 200, SessionFraction(minutes), inSession ? CLR_SECT : CLR_LINE);
+   UiLine("next", "next: " + NextTrigger(), CLR_SECT, 8);
 
    UiSection("or", "OPENING RANGE");
    if(haveRange)
@@ -2494,6 +2544,10 @@ void DrawTest()
    RowRead("g12", "Margin", (has ? Money(margin) + " of " + Money(freeMargin) : "no price"),
            marginOk ? CLR_GOOD : CLR_BAD);
 
+   UiSection("rulenow", "THE RULE RIGHT NOW");
+   UiLine("rn_state", RuleStateWord(), CLR_VALUE, 8);
+   UiLine("rn_next", "next: " + NextTrigger(), CLR_SECT, 8);
+
    UiSection("would", "WHAT IT WOULD SEND");
    RowRead("w_side", "Side / lots", (has ? side + "  " + DoubleToString(lots, 2) : "-"), CLR_VALUE);
    RowRead("w_entry", "Entry", (has ? DoubleToString(entry, _Digits) : "-"), CLR_VALUE);
@@ -2794,7 +2848,7 @@ int OnInit()
 
    // the banner, then the whole configuration as a small table
    Log("INIT", "-------------------------------------------------------------");
-   Log("INIT", "DayTraderMT5 v1.22 on " + _Symbol + " " + PeriodDescription(g_tf) +
+   Log("INIT", "DayTraderMT5 v1.23 on " + _Symbol + " " + PeriodDescription(g_tf) +
               ", account " + AccountModeWord() + " #" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) +
               ", magic " + IntegerToString(g_magic));
    Log("INIT", "-------------------------------------------------------------");

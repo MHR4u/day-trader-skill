@@ -98,8 +98,8 @@ class TheFile(unittest.TestCase):
         text = source()
         version = re.search(r'#property version\s+"([0-9.]+)"', text)
         self.assertIsNotNone(version)
-        self.assertEqual(version.group(1), "1.22")
-        self.assertIn("v1.22", text, "the banner and the panel footer name the version")
+        self.assertEqual(version.group(1), "1.23")
+        self.assertIn("v1.23", text, "the banner and the panel footer name the version")
         self.assertIn("#property copyright", text)
         self.assertIn("#property link", text)
 
@@ -390,6 +390,19 @@ class TheProof(unittest.TestCase):
         self.assertIn("Heartbeat();", body_of(text, "OnTimer"))
         self.assertIn("InpHeartbeatMinutes", text)
         self.assertIn("GatesOpen(", body_of(text, "Heartbeat"))
+
+    def test_the_panel_says_what_has_to_happen_next(self):
+        """A trader should never have to scroll a log to learn why nothing
+        happened: the price that would trigger an entry sits on the chart."""
+        text = source()
+        trigger = body_of(text, "NextTrigger")
+        for phrase in ("weekend", "flat-by", "closed until", "paused", "in a trade",
+                       "daily loss stop", "done for the day", "range still forming",
+                       "close above"):
+            self.assertIn(phrase, trigger, phrase)
+        self.assertIn("NextTrigger()", body_of(text, "DrawDash"))
+        self.assertIn("NextTrigger()", body_of(text, "DrawTest"))
+        self.assertIn("NextTrigger()", body_of(text, "Heartbeat"))
 
     def test_the_panel_starts_below_the_buy_sell_corner(self):
         text = source()
