@@ -22,7 +22,7 @@ python3 --version        # Windows par: python --version
 
 ```bash
 python3 -m unittest discover -s tests
-# Ran 405 tests ... OK
+# Ran 444 tests ... OK
 ```
 
 Ye ek synthetic demo broker (GMT+3) par chalta hai, internet ki zaroorat nahi.

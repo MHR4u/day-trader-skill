@@ -489,7 +489,7 @@ Har click par EA poora table `GlobalVariable` mein likhta hai:
 
 ```
 DTMT5_C_risk_pct = 1.0      DTMT5_C_tf = 5        DTMT5_C_flat_by = 1255
-DTMT5_C_or_min   = 60        DTMT5_C_shorts = 0   ... 33 keys
+DTMT5_C_or_min   = 60        DTMT5_C_shorts = 0   ... 34 keys
 ```
 
 Isi liye chart band karke wapas kholen, timeframe badlein, yaa terminal restart
@@ -626,7 +626,7 @@ bar par rule -> panel**. Flat-by pehle kyun? Kyunki waqt guzar gaya to sabse peh
 band karna hai, chahe rule kuch bhi kahe.
 
 `OnChartEvent` ka order: **tab click -> chaar buttons -> `[-]` `[+]` `<` `>` `ON/OFF` row**.
-Row ka naam `DTMT5_UI_b_<id>_<act>` hota hai, is liye ek hi handler 33 rows sambhal
+Row ka naam `DTMT5_UI_b_<id>_<act>` hota hai, is liye ek hi handler 34 rows sambhal
 leta hai; `act` = `_dn`, `_up`, `_nx`, `_pv` yaa `_tg`.
 
 ---
