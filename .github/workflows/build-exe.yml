@@ -2,7 +2,7 @@ name: build-exe
 
 # Builds the single-file dtcli.exe on a real Windows machine (PyInstaller
 # cannot cross compile), runs the suite there too, and keeps the log so a
-# Windows-only failure can be read without a login.
+# Windows-only failure can be read from the run page.
 on:
   push:
     branches: ["main", "arena/**"]
@@ -28,21 +28,24 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pyinstaller MetaTrader5
 
+      # The log lives outside the checkout: a stray file in the repo root would
+      # change the tree the suite checks.
       - name: The suite on Windows (the log is uploaded either way)
         shell: bash
         run: |
-          python -m unittest discover -s tests -v > test-log.txt 2>&1 || echo "TESTS_FAILED" > tests-failed.txt
-          tail -40 test-log.txt
+          LOG="$RUNNER_TEMP/test-log.txt"
+          python -m unittest discover -s tests -v > "$LOG" 2>&1 \
+            || echo "TESTS_FAILED" > "$RUNNER_TEMP/tests-failed.txt"
+          tail -40 "$LOG"
 
       - name: What failed, if anything
         if: always()
         shell: bash
         run: |
-          if [ -f tests-failed.txt ]; then
+          LOG="$RUNNER_TEMP/test-log.txt"
+          if [ -f "$RUNNER_TEMP/tests-failed.txt" ]; then
             echo "::error::the suite failed on Windows; see test-log.txt in the artifacts"
-            # one annotation per failing test, so the name is visible in the run
-            # without downloading anything
-            grep -E "^(FAIL|ERROR):|AssertionError:" test-log.txt | head -20 | while read -r line; do
+            grep -E "^(FAIL|ERROR):|AssertionError:" "$LOG" | head -20 | while read -r line; do
               echo "::error::${line}"
             done
           else
@@ -68,11 +71,11 @@ jobs:
           name: dtcli-windows
           path: |
             dist/dtcli.exe
-            test-log.txt
+            ${{ runner.temp }}/test-log.txt
           if-no-files-found: warn
 
       - name: Fail the job if the suite failed
         if: always()
         shell: bash
         run: |
-          if [ -f tests-failed.txt ]; then exit 1; fi
+          if [ -f "$RUNNER_TEMP/tests-failed.txt" ]; then exit 1; fi
