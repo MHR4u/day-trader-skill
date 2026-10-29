@@ -200,8 +200,12 @@ Advisor. Copy it to `MQL5\Experts`, compile it with F7, attach it to an M5
 chart, and the terminal trades it by itself: the opening-range breakout, the
 ATR stop, the R target, risk-percent sizing, the spread and stops-level gates,
 one trade a day, a daily loss stop, breakeven, trailing, a partial, and a
-flat-by time. Demo by default; a REAL account needs `InpAllowLive`. The install
-walkthrough is in `trader-mt5/ea/README.md`.
+flat-by time. Demo by default; a REAL account needs `InpAllowLive`. It reports
+in two places: a dashboard on the chart (seven sections, every number the rule
+used, plus `PAUSE`, `DRY` and `CLOSE OURS` buttons) and a tagged console line for
+every decision (`time | TAG | what happened`) in the Experts log. The install
+walkthrough is in `trader-mt5/ea/README.md`, and every message is decoded in
+`trader-mt5/ea/CONSOLE.md`.
 
 ## The tools
 

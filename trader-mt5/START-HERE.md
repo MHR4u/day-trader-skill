@@ -64,14 +64,24 @@ khud trade karta hai, aap ko har order par "yes" nahi dena parta.
    `Tools > Options > Expert Advisors > Allow algorithmic trading` ON.
 4. **M5 chart** kholein (jo symbol trade karna hai), Navigator se
    `DayTraderMT5` chart par drag karein, `Allow algorithmic trading` tick karein.
-5. Chart par top-left panel batata hai: session khula hai ya band, opening
-   range ban gaya ya nahi, aaj kitne trade, aur `trading: yes` ya `no, <wajah>`.
+5. Chart par dashboard (safed/neela panel) aata hai: symbol, New York ka waqt,
+   session khula ya band, opening range, EMA, ATR, spread, aaj ke entries,
+   realised P/L, khuli trade ka stop/target/R, risk budget, aur sabse aakhir
+   mein `Trading: yes` ya `no: <wajah>`. Neeche teen button hain:
+   `PAUSE` (naye trade band), `DRY` (sirf signal), `CLOSE OURS` (do click mein
+   apni trade band).
+6. `Toolbox > Experts` tab mein har faisla ek line mein aata hai, tag ke sath:
+   `time | TAG | baat`, jaise
+   `14:05:33 | SIGNAL | BUY signal: M5 closed 2394.12, above the range ...`,
+   phir `SIZE`, `ORDER`, `MANAGE`, ya `BLOCK` ke sath wajah.
 
 Demo account par pehle chalayein. REAL account par ye tab tak trade nahi karega
 jab tak aap `InpAllowLive` ko `true` na karein. Sirf signal dekhna ho to
-`InpDryRun = true` kar dein: log mein likha aayega, order nahi jayega.
+`InpDryRun = true` kar dein (ya panel ka `DRY` button): log mein likha aayega,
+order nahi jayega.
 
-Poori tafseel: `trader-mt5/ea/README.md`.
+- Har console line aur panel ke har khaane ki tafseel: `trader-mt5/ea/CONSOLE.md`
+- Install aur troubleshooting: `trader-mt5/ea/README.md`
 
 ## 5. Apna config set karein
 

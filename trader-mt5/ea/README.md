@@ -11,6 +11,7 @@ broker's stops level and the spread checked before anything is sent.
 
 ```
 trader-mt5/ea/DayTraderMT5.mq5     the EA (this folder)
+trader-mt5/ea/CONSOLE.md           every console line and every panel field, explained
 trader-mt5/ea/README.md            you are here
 ```
 
@@ -99,16 +100,33 @@ you do not have to come back to this table.
 
 ## What you will see
 
-On the chart, a top-left block: symbol and timeframe, account type, the New
-York clock and the session window, whether the session is open or closed, the
-opening range once it has formed, the ATR and the spread, today's entries and
-realised profit, the risk budget, and the one line that matters:
-`trading: yes`, or `trading: no, <the exact switch that is missing>`.
+**On the chart, a dashboard.** Seven sections, every number the rule used:
+market and the New York clock, the opening range, the EMAs, the ATR and the
+spread, today's entries and realised profit, the open position with its stop,
+target and progress in R, the risk budget, and the one line that matters:
+`trading: yes`, or `trading: no, <the exact switch that is missing>`. Three
+buttons sit at the bottom: `PAUSE` (stops new entries, management keeps
+running), `DRY` (toggles signal-only mode live) and `CLOSE OURS` (two clicks,
+six seconds, closes only its own positions).
 
-In the Toolbox, `Experts` tab: one line at startup with the account type and
-the session, and then a line per decision (`SENT`, `DRY RUN would have sent`,
-`no order: <why>`, `closed #<ticket>`, `stop trailed to ...`). Nothing prints on
-every tick, so the log stays readable.
+**In the Toolbox, `Experts` tab, a tagged console.** Every line is
+`time | TAG | what happened`:
+
+```
+2026.10.29 13:58:02 | CONF  | rule      : M5 bars, EMA 50/200, opening range 60 min, long only
+2026.10.29 13:58:02 | CONF  | clock     : New York time, session 03:05-19:00, flat by 20:55, weekdays only
+2026.10.29 13:58:02 | GATE  | trading is allowed: the terminal, the account and the broker all agree
+2026.10.29 14:05:33 | SIGNAL | BUY signal: M5 closed 2394.12, above the range (2388.10 - 2393.40), trend up
+2026.10.29 14:05:33 | SIZE  | 0.42 lots, stop 2387.40 (670 points, ATR 2.00 x 0.50), target 2404.20 (1.50R)
+2026.10.29 14:05:33 | ORDER | accepted: order #132889001, deal #241112233 at 2394.35, 0.42 lots
+2026.10.29 15:12:10 | MANAGE | #132889001: stop to the entry 2394.10 at 1.02R
+```
+
+Fifteen tags in all (`INIT, CONF, GATE, RULE, SIGNAL, BLOCK, SIZE, RISK, ORDER,
+MANAGE, FLAT, CTRL, ERROR, DAY, STOP`), and every one of them, every message it
+can print, and every field on the dashboard is explained in
+[CONSOLE.md](CONSOLE.md). Nothing prints on every tick, so the log stays
+readable; `InpVerbose` makes the rule speak on every bar when you are debugging.
 
 ## When nothing happens
 
