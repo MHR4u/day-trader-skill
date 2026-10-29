@@ -42,10 +42,9 @@ jobs:
             echo "::error::the suite failed on Windows; see test-log.txt in the artifacts"
             # one annotation per failing test, so the name is visible in the run
             # without downloading anything
-            grep -E "^(FAIL|ERROR):" test-log.txt | head -20 | while read -r line; do
+            grep -E "^(FAIL|ERROR):|AssertionError:" test-log.txt | head -20 | while read -r line; do
               echo "::error::${line}"
             done
-            grep -E "AssertionError|Error:" -A3 test-log.txt | head -40 || true
           else
             echo "the suite passed on Windows"
           fi

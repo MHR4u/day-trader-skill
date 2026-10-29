@@ -33,6 +33,12 @@ def every_text_file():
                 yield os.path.join(base, f)
 
 
+# The tree the pack ships, not the droppings a run leaves behind: the tools
+# write trader/ in whatever directory they run from, and a build makes
+# build/ and dist/.
+RUNTIME = {".git", "__pycache__", ".pytest_cache", "build", "dist", "trader"}
+
+
 class Repo(unittest.TestCase):
     def test_twelve_skill_folders_at_the_root(self):
         found = sorted(d for d in os.listdir(ROOT)
@@ -40,9 +46,11 @@ class Repo(unittest.TestCase):
         self.assertEqual(found, sorted(SKILLS))
 
     def test_root_matches_the_reel(self):
-        root = sorted(d for d in os.listdir(ROOT) if d not in (".git",))
-        self.assertEqual(root, sorted([".claude-plugin", ".gitattributes", ".github", ".gitignore", "LICENSE",
-                                       "README.md", "tests"] + SKILLS))
+        root = sorted(d for d in os.listdir(ROOT) if d not in RUNTIME)
+        want = sorted([".claude-plugin", ".gitattributes", ".github", ".gitignore", "LICENSE",
+                       "README.md", "tests"] + SKILLS)
+        self.assertEqual(root, want, "unexpected at the root: %s, missing: %s"
+                         % (sorted(set(root) - set(want)), sorted(set(want) - set(root))))
 
     def test_frontmatter_name_and_description(self):
         for s in SKILLS:
