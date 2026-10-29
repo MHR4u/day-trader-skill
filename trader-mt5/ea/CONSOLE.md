@@ -91,7 +91,7 @@ function ke andar, is liye har line ka format ek jaisa hai.
 
 ```
 2026.10.29 13:58:02 | INIT  | -------------------------------------------------------------
-2026.10.29 13:58:02 | INIT  | DayTraderMT5 v1.10 on XAUUSD M5, account DEMO #5001234, magic 20261019
+2026.10.29 13:58:02 | INIT  | DayTraderMT5 v1.21 on XAUUSD M5, account DEMO #5001234, magic 20261019
 2026.10.29 13:58:02 | INIT  | -------------------------------------------------------------
 2026.10.29 13:58:02 | CONF  | rule      : M5 bars, EMA 50/200, opening range 60 min, long only
 2026.10.29 13:58:02 | CONF  | stops     : 0.50 ATR behind the entry or the range mid, target 1.50R
@@ -103,8 +103,8 @@ function ke andar, is liye har line ka format ek jaisa hai.
 2026.10.29 13:58:02 | CONF  | manage    : breakeven 1.00R, trail 1.00R / 150 points, partial off
 2026.10.29 13:58:02 | GATE  | trading is allowed: the terminal, the account and the broker all agree
 2026.10.29 13:58:02 | GATE  | all 11 gates are open: an entry would be sent on the next break
-| INIT  | this EA is offline: no WebRequest, no sockets, no DLL, no include beyond Trade.mqh
-| INIT  | dashboard: 9 pages, click a tab; every row with [-] [+] is live
+2026.10.29 13:58:02 | INIT  | this EA is offline: no WebRequest, no sockets, no DLL, no include beyond Trade.mqh
+2026.10.29 13:58:02 | INIT  | dashboard: 9 pages, click a tab; every row with [-] [+] is live
 2026.10.29 13:58:02 | INIT  | -------------------------------------------------------------
 ```
 
@@ -116,8 +116,8 @@ theek karein - baad mein dhoondna nahi parega.
 `GATE` ki do aur shakalein:
 
 ```
-| GATE  | trading is not allowed yet: the AutoTrading button in the toolbar is off
-| GATE  | REAL account and InpAllowLive is false: this EA will read and log, and will not trade.
+2026.10.29 13:58:02 | GATE  | trading is not allowed yet: the AutoTrading button in the toolbar is off
+2026.10.29 13:58:02 | GATE  | REAL account and InpAllowLive is false: this EA will read and log, and will not trade.
 ```
 
 Pehli: toolbar ka bara button dabayein. Doosri: ye guard hai, demo par jayein ya
