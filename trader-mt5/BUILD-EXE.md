@@ -20,12 +20,20 @@ deta hai. `dtcli` sirf dispatcher hai.
 
 ## A. Seedha download (kuch install nahi)
 
-GitHub Actions Windows par `dtcli.exe` bana kar rakhta hai:
+Ek hi link, seedha exe:
 
-1. GitHub par **Actions** tab kholein.
-2. Left se **build-exe** workflow, phir latest green run.
-3. Neeche **Artifacts** se `dtcli-windows.zip` download karein, extract karein:
-   andar `dtcli.exe` hai. Bas.
+**https://github.com/MHR4u/day-trader-skill/releases/download/dtcli-latest/dtcli.exe**
+(~9 MB, Windows 64-bit, Python ki zaroorat nahi)
+
+Release page: https://github.com/MHR4u/day-trader-skill/releases/tag/dtcli-latest
+
+Ye har green build par khud update hota hai (`build-exe` workflow). Download
+karke `dtcli.exe` ko apne trading folder mein rakhein aur wahan se chalayein.
+Windows SmartScreen pehli baar "unrecognised app" keh sakta hai (code sign nahi
+hai): **More info > Run anyway**. Chahein to khud build karein (section B).
+
+Purana tareeqa (agar release na mile): **Actions** tab > **build-exe** > latest
+green run > neeche **Artifacts** > `dtcli-windows.zip` (andar `dtcli.exe` bhi hai).
 
 ## B. Khud build karein (Windows, 1 command)
 

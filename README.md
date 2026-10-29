@@ -172,6 +172,27 @@ NYSE clock.
 The full MT5 walkthrough, every flag, the symbol-suffix and filling-mode
 traps, and the troubleshooting table are in `trader-mt5/SKILL.md`.
 
+### One program for all of it: dtcli
+
+The twelve tools also come as one command, and one Windows executable with no
+Python to install: `dtcli` finds the tool you name and hands it your arguments,
+so the output and the exit codes are the tool's own.
+
+```bash
+python3 trader-mt5/dtcli.py list              # the thirteen tools
+python3 trader-mt5/dtcli.py mt5 doctor
+python3 trader-mt5/dtcli.py lots --write && python3 trader-mt5/dtcli.py risk
+```
+
+```bat
+dtcli.exe mt5 --replay snapshot.json --now "2026-10-20 09:35" account
+```
+
+The exe is built by the `build-exe` workflow and published here:
+[dtcli.exe](https://github.com/MHR4u/day-trader-skill/releases/download/dtcli-latest/dtcli.exe),
+or build it yourself on Windows with `trader-mt5\build-exe.bat`. The three
+ways, and what is inside the binary, are in `trader-mt5/BUILD-EXE.md`.
+
 ## The tools
 
 All standard-library Python except the MT5 bridge, which uses the broker's own
