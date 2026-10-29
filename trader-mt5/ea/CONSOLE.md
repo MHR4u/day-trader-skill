@@ -8,7 +8,7 @@ Ye file sirf `DayTraderMT5.mq5` ke bare mein hai. Do hisse hain:
 Dono ka ek hi maqsad: aapko har waqt pata ho ke EA ne kya dekha, kya socha,
 kya kiya, aur agar kuch nahi kiya to kyun nahi kiya.
 
-**v1.21:** dashboard 9 pages ka hai (DASH, RULE, RISK, CLOCK, MANAGE, LOG,
+**v1.22:** dashboard 9 pages ka hai (DASH, RULE, RISK, CLOCK, MANAGE, LOG,
 TEST, PACK, HELP), aur har number chart par hi **click se badalta** hai: `[-]`
 `[+]` se number, `ON/OFF` se switch, `<` `>` se list. Jo aap click karte hain wo
 terminal ke global variables mein save ho jata hai, is liye chart band kar ke
@@ -91,7 +91,7 @@ function ke andar, is liye har line ka format ek jaisa hai.
 
 ```
 2026.10.29 13:58:02 | INIT  | -------------------------------------------------------------
-2026.10.29 13:58:02 | INIT  | DayTraderMT5 v1.21 on XAUUSD M5, account DEMO #5001234, magic 20261019
+2026.10.29 13:58:02 | INIT  | DayTraderMT5 v1.22 on XAUUSD M5, account DEMO #5001234, magic 20261019
 2026.10.29 13:58:02 | INIT  | -------------------------------------------------------------
 2026.10.29 13:58:02 | CONF  | rule      : M5 bars, EMA 50/200, opening range 60 min, long only
 2026.10.29 13:58:02 | CONF  | stops     : 0.50 ATR behind the entry or the range mid, target 1.50R
@@ -306,7 +306,7 @@ badalne par purane page ke objects hata diye jate hain, naye ban jate hain.
 | = OPENING RANGE ...  (yahi 7 sections DASH par)    |
 | ...                                                |
 |  [ PAUSE ] [ DRY OFF ] [ CLOSE OUR ] [ RESET ]     |
-| v1.21  magic 20261019  quiet log                   |
+| v1.22  magic 20261019  quiet log                   |
 +----------------------------------------------------+
 ```
 

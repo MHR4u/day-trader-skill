@@ -98,8 +98,8 @@ class TheFile(unittest.TestCase):
         text = source()
         version = re.search(r'#property version\s+"([0-9.]+)"', text)
         self.assertIsNotNone(version)
-        self.assertEqual(version.group(1), "1.21")
-        self.assertIn("v1.21", text, "the banner and the panel footer name the version")
+        self.assertEqual(version.group(1), "1.22")
+        self.assertIn("v1.22", text, "the banner and the panel footer name the version")
         self.assertIn("#property copyright", text)
         self.assertIn("#property link", text)
 
@@ -363,6 +363,16 @@ class TheProof(unittest.TestCase):
         self.assertIn("g_minRR", preview)
         self.assertIn("MinStopPoints()", preview)
         self.assertIn("SizeLots(", preview)
+
+    def test_the_order_check_declares_a_check_result(self):
+        """MetaEditor's signature is OrderCheck(const MqlTradeRequest&,
+        MqlTradeCheckResult&). A MqlTradeResult there is a compile error - it is
+        OrderSend's struct, and it carries no margin for the page to show."""
+        text = source()
+        self.assertNotIn("MqlTradeResult", text)
+        check = body_of(text, "RunOrderCheck")
+        self.assertRegex(check, r"MqlTradeCheckResult\s+result;")
+        self.assertIn("result.margin", check)
 
     def test_the_test_page_names_every_gate(self):
         page = body_of(source(), "DrawTest")

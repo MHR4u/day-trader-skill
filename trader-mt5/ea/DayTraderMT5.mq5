@@ -33,7 +33,7 @@
 //+------------------------------------------------------------------+
 #property copyright "day-trader-skill, MIT"
 #property link      "https://github.com/MHR4u/day-trader-skill"
-#property version   "1.21"
+#property version   "1.22"
 #property description "Trend-filtered opening-range breakout with ATR stop, R target, risk-percent sizing,"
 #property description "spread and stops-level gates, one trade a day, a daily loss stop, breakeven, trailing,"
 #property description "partial take-profit and a flat-by time. Demo by default: a REAL account needs InpAllowLive."
@@ -978,8 +978,8 @@ void RunOrderCheck()
       return;
    }
 
-   MqlTradeRequest request;
-   MqlTradeResult  result;
+   MqlTradeRequest      request;
+   MqlTradeCheckResult  result;      // OrderCheck fills a check result, not a trade result
    ZeroMemory(request);
    ZeroMemory(result);
 
@@ -1646,7 +1646,7 @@ void TryEntry()
    else
    {
       g_lastRetcode = IntegerToString(g_trade.ResultRetcode());
-      Log("ERROR", StringFormat("refused: %d %s", g_trade.ResultRetcode(),
+      Log("ERROR", StringFormat("refused: %d %s", (int)g_trade.ResultRetcode(),
                                 g_trade.ResultRetcodeDescription()));
    }
 }
@@ -1709,7 +1709,7 @@ void ManagePositions()
             }
             else
                Log("ERROR", StringFormat("the partial on #%d was refused: %d %s", (int)ticket,
-                                         g_trade.ResultRetcode(), g_trade.ResultRetcodeDescription()));
+                                         (int)g_trade.ResultRetcode(), g_trade.ResultRetcodeDescription()));
          }
       }
 
@@ -1787,7 +1787,7 @@ void CloseAllOurs(const int reasonMinutes, const string why)
                                   (int)ticket, DoubleToString(volume, 2), HHMM(reasonMinutes), why));
       }
       else
-         Log("ERROR", StringFormat("could not close #%d: %d %s", (int)ticket, g_trade.ResultRetcode(),
+         Log("ERROR", StringFormat("could not close #%d: %d %s", (int)ticket, (int)g_trade.ResultRetcode(),
                                    g_trade.ResultRetcodeDescription()));
    }
    if(closed > 0)
@@ -2160,7 +2160,7 @@ void UiActions()
 
 void UiFooter()
 {
-   string foot = "v1.21  magic " + IntegerToString(g_magic) + "  " + (g_verbose ? "verbose" : "quiet") + " log";
+   string foot = "v1.22  magic " + IntegerToString(g_magic) + "  " + (g_verbose ? "verbose" : "quiet") + " log";
    UiText(PANEL_TAG + "foot", g_uiX + PANEL_PAD, g_uiY, foot, CLR_LABEL, 7, "Segoe UI",
           ANCHOR_LEFT_UPPER);
    g_uiY += 12;
@@ -2794,7 +2794,7 @@ int OnInit()
 
    // the banner, then the whole configuration as a small table
    Log("INIT", "-------------------------------------------------------------");
-   Log("INIT", "DayTraderMT5 v1.21 on " + _Symbol + " " + PeriodDescription(g_tf) +
+   Log("INIT", "DayTraderMT5 v1.22 on " + _Symbol + " " + PeriodDescription(g_tf) +
               ", account " + AccountModeWord() + " #" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) +
               ", magic " + IntegerToString(g_magic));
    Log("INIT", "-------------------------------------------------------------");
