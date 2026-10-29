@@ -33,11 +33,11 @@
 //+------------------------------------------------------------------+
 #property copyright "day-trader-skill, MIT"
 #property link      "https://github.com/MHR4u/day-trader-skill"
-#property version   "1.20"
+#property version   "1.21"
 #property description "Trend-filtered opening-range breakout with ATR stop, R target, risk-percent sizing,"
 #property description "spread and stops-level gates, one trade a day, a daily loss stop, breakeven, trailing,"
 #property description "partial take-profit and a flat-by time. Demo by default: a REAL account needs InpAllowLive."
-#property description "A tagged console line for every decision, and an eight page dashboard where every number is one click away."
+#property description "Offline. A tagged console line for every decision, and a nine page dashboard where every number is one click away, with a TEST page that proves the order before it is sent."
 
 #include <Trade\Trade.mqh>
 
@@ -92,8 +92,9 @@ input bool             InpAlertPush        = false;     // Push to the phone (ne
 input group "Console and panel"
 input bool             InpShowPanel        = true;      // Draw the dashboard on the chart
 input int              InpPanelX           = 14;        // Dashboard distance from the left edge, pixels
-input int              InpPanelY           = 24;        // Dashboard distance from the top edge, pixels
+input int              InpPanelY           = 96;        // Dashboard distance from the top edge, below the buy/sell corner
 input bool             InpVerbose          = false;     // Log every closed bar, not only the changes
+input int              InpHeartbeatMinutes = 15;        // An ALIVE line this often while it runs (0 = off)
 
 input group "Plumbing"
 input int              InpDeviationPoints  = 20;        // Slippage allowed, points
@@ -152,6 +153,9 @@ bool     g_alertPush    = false;
 int      g_page         = 0;      // 0 dash, 1 rule, 2 risk, 3 clock, 4 manage, 5 log, 6 pack, 7 help
 bool     g_confirmReset = false;
 datetime g_confirmResetAt = 0;
+string   g_lastCheck    = "-";             // the terminal's answer to the order check
+datetime g_lastBeat     = 0;               // the last ALIVE line
+int      g_heartbeat    = 15;              // minutes between ALIVE lines, 0 = off
 string   g_lastRetcode  = "-";    // the broker's last answer, for the pack page
 bool     g_verbose      = false;  // log every bar, not only the changes
 bool     g_paused       = false;  // entries paused from the dashboard
@@ -188,7 +192,7 @@ datetime g_flatTry      = 0;      // the last flat-by attempt, so it is not repe
 #define CLR_BTN     C'31,58,95'
 #define CLR_DANGER  C'122,38,38'
 
-#define PAGE_COUNT  8
+#define PAGE_COUNT  9
 #define LOG_RING    12
 #define CFG_PREFIX  "DTMT5_C_"
 
@@ -776,6 +780,238 @@ void PruneMarks()
 }
 
 //+------------------------------------------------------------------+
+//| The self check: can it trade, and what exactly would it send     |
+//+------------------------------------------------------------------+
+//  Two questions every trader asks before trusting an EA: does it
+//  actually talk to the terminal, and would the broker take its order?
+//  The first is answered by the gates below, the second by sending the
+//  exact request through the terminal's own OrderCheck(), which prices
+//  and validates it and sends nothing at all.
+//+------------------------------------------------------------------+
+ENUM_ORDER_TYPE_FILLING FillingForSymbol()
+{
+   long modes = SymbolInfoInteger(_Symbol, SYMBOL_FILLING_MODE);
+   if((modes & SYMBOL_FILLING_FOK) != 0)
+      return ORDER_FILLING_FOK;
+   if((modes & SYMBOL_FILLING_IOC) != 0)
+      return ORDER_FILLING_IOC;
+   return ORDER_FILLING_RETURN;
+}
+
+// the order the rule would build at this moment, for the TEST page and for
+// the order check: same stop maths, same sizing, same target
+bool PreviewOrder(string &side, double &lots, double &entry, double &stop, double &target,
+                  double &distance, double &margin, string &why)
+{
+   side = "BUY";
+   lots = 0.0;
+   entry = 0.0;
+   stop = 0.0;
+   target = 0.0;
+   distance = 0.0;
+   margin = 0.0;
+   why = "";
+
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol, tick))
+   {
+      why = "no tick from the terminal";
+      return false;
+   }
+   double atr = AtrValue();
+   if(atr <= 0.0)
+   {
+      why = "the ATR is not ready yet";
+      return false;
+   }
+
+   bool sell = (g_shorts && TrendDown() && !TrendUp());
+   if(sell)
+      side = "SELL";
+
+   distance = MathMax(atr * g_atrMult, MinStopPoints() * _Point);
+   if(distance <= 0.0)
+   {
+      why = "no stop distance";
+      return false;
+   }
+
+   if(sell)
+   {
+      entry  = NormalizeDouble(tick.bid, _Digits);
+      stop   = NormalizeDouble(entry + distance, _Digits);
+      target = NormalizeDouble(entry - g_minRR * distance, _Digits);
+   }
+   else
+   {
+      entry  = NormalizeDouble(tick.ask, _Digits);
+      stop   = NormalizeDouble(entry - distance, _Digits);
+      target = NormalizeDouble(entry + g_minRR * distance, _Digits);
+   }
+
+   string note = "";
+   lots = SizeLots(distance, note);
+   if(lots <= 0.0)
+   {
+      lots = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+      why  = "the budget cannot cover one lot at this stop: " + note;
+   }
+
+   ENUM_ORDER_TYPE type = (sell ? ORDER_TYPE_SELL : ORDER_TYPE_BUY);
+   if(!OrderCalcMargin(type, _Symbol, lots, entry, margin))
+      why = (why == "" ? "the terminal could not price the margin" : why);
+
+   return true;
+}
+
+// the eleven gates the EA checks before it sends anything, one at a time,
+// so the chart can show which one is closed instead of a vague "no"
+bool GatePass(const int which, string &detail)
+{
+   detail = "";
+   datetime nyNow = ToNewYork(TimeCurrent());
+   int minutes = MinutesOfDay(nyNow);
+
+   if(which == 0)
+   {
+      bool ok = TerminalInfoInteger(TERMINAL_TRADE_ALLOWED);
+      detail = (ok ? "on" : "the AutoTrading button");
+      return ok;
+   }
+   if(which == 1)
+   {
+      bool ok = MQLInfoInteger(MQL_TRADE_ALLOWED);
+      detail = (ok ? "on" : "Options > Expert Advisors");
+      return ok;
+   }
+   if(which == 2)
+   {
+      bool ok = AccountInfoInteger(ACCOUNT_TRADE_ALLOWED);
+      detail = (ok ? AccountModeWord() : "the account cannot trade");
+      return ok;
+   }
+   if(which == 3)
+   {
+      bool ok = AccountInfoInteger(ACCOUNT_TRADE_EXPERT);
+      detail = (ok ? "allowed" : "the broker disabled EAs");
+      return ok;
+   }
+   if(which == 4)
+   {
+      bool ok = !g_liveBlocked;
+      detail = (ok ? (IsLiveAccount() ? "REAL, InpAllowLive on" : "demo, never blocked") : "REAL and InpAllowLive is false");
+      return ok;
+   }
+   if(which == 5)
+   {
+      bool weekend = (WeekdayOf(nyNow) == 0 || WeekdayOf(nyNow) == 6);
+      bool ok = (!g_weekdaysOnly || !weekend);
+      detail = (ok ? "a weekday" : "the weekend in New York");
+      return ok;
+   }
+   if(which == 6)
+   {
+      bool ok = InWindow(minutes, g_sessionStart, g_sessionEnd);
+      detail = (ok ? "inside " + HHMM(g_sessionStart) + "-" + HHMM(g_sessionEnd)
+                   : "outside " + HHMM(g_sessionStart) + "-" + HHMM(g_sessionEnd));
+      return ok;
+   }
+   if(which == 7)
+   {
+      int used = CountEntriesToday();
+      bool ok = (used < g_maxTrades);
+      detail = (ok ? IntegerToString(used) + " of " + IntegerToString(g_maxTrades)
+                   : "the day's entries are used");
+      return ok;
+   }
+   if(which == 8)
+   {
+      double realised = RealisedToday();
+      bool ok = !(g_maxDailyLoss > 0.0 && realised <= -g_maxDailyLoss);
+      detail = (ok ? Money(realised) : "the daily loss stop is hit");
+      return ok;
+   }
+   if(which == 9)
+   {
+      double spread = SpreadPoints();
+      bool ok = !(g_spreadMax > 0.0 && spread > g_spreadMax);
+      detail = (ok ? DoubleToString(spread, 0) + " points" : "over the ceiling");
+      return ok;
+   }
+   if(which == 10)
+   {
+      MqlRates rates[];
+      bool ok = (LoadRates(10, rates) && AtrValue() > 0.0);
+      detail = (ok ? "bars and ATR ready" : "no bars or no ATR yet");
+      return ok;
+   }
+   detail = "unknown gate";
+   return false;
+}
+
+// how many of the eleven are open, and the first one that is not
+int GatesOpen(string &firstFail)
+{
+   firstFail = "";
+   int open = 0;
+   string detail = "";
+   for(int i = 0; i < 11; i++)
+   {
+      if(GatePass(i, detail))
+         open++;
+      else if(firstFail == "")
+         firstFail = detail;
+   }
+   return open;
+}
+
+// ask the terminal to validate the exact order, without sending it
+void RunOrderCheck()
+{
+   string side = "";
+   string why = "";
+   double lots = 0.0, entry = 0.0, stop = 0.0, target = 0.0, distance = 0.0, margin = 0.0;
+   if(!PreviewOrder(side, lots, entry, stop, target, distance, margin, why))
+   {
+      g_lastCheck = "no: " + why;
+      Log("CHECK", "cannot build an order to test: " + why);
+      return;
+   }
+
+   MqlTradeRequest request;
+   MqlTradeResult  result;
+   ZeroMemory(request);
+   ZeroMemory(result);
+
+   request.action       = TRADE_ACTION_DEAL;
+   request.symbol       = _Symbol;
+   request.volume       = lots;
+   request.type         = (side == "SELL" ? ORDER_TYPE_SELL : ORDER_TYPE_BUY);
+   request.price        = entry;
+   request.sl           = stop;
+   request.tp           = target;
+   request.deviation    = (ulong)g_deviation;
+   request.magic        = (ulong)g_magic;
+   request.comment      = "DayTraderMT5 order check, never sent";
+   request.type_filling = FillingForSymbol();
+
+   bool ok = OrderCheck(request, result);
+   if(ok && (result.retcode == TRADE_RETCODE_DONE || result.retcode == 0))
+   {
+      g_lastCheck = "ok: margin " + Money(result.margin);
+      Log("CHECK", StringFormat("%s %s %s lots at %s, stop %s, target %s: the terminal accepted the whole order and priced the margin at %s. Nothing was sent.",
+                                side, _Symbol, DoubleToString(lots, 2), DoubleToString(entry, _Digits),
+                                DoubleToString(stop, _Digits), DoubleToString(target, _Digits),
+                                Money(result.margin)));
+      return;
+   }
+
+   g_lastCheck = "no: " + IntegerToString((int)result.retcode) + " " + result.comment;
+   Log("CHECK", StringFormat("%s %s %s lots: the terminal refused it, %d %s. Nothing was sent.",
+                             side, _Symbol, DoubleToString(lots, 2), (int)result.retcode, result.comment));
+}
+
+//+------------------------------------------------------------------+
 //| Settings: the panel can retune every number, and remember it     |
 //+------------------------------------------------------------------+
 //  Every click on the chart writes the whole table to the terminal's
@@ -854,6 +1090,7 @@ void SaveSettings()
    GlobalVariableSet(CFG_PREFIX + "alert_sound", (g_alertSound ? 1.0 : 0.0));
    GlobalVariableSet(CFG_PREFIX + "alert_push",  (g_alertPush ? 1.0 : 0.0));
    GlobalVariableSet(CFG_PREFIX + "verbose",     (g_verbose ? 1.0 : 0.0));
+   GlobalVariableSet(CFG_PREFIX + "heartbeat",   (double)g_heartbeat);
 }
 
 bool CfgHas(const string id)
@@ -900,6 +1137,7 @@ void ApplyInputDefaults()
    g_alertSound     = InpAlertSound;
    g_alertPush      = InpAlertPush;
    g_verbose        = InpVerbose;
+   g_heartbeat      = MathMax(0, InpHeartbeatMinutes);
    g_panelX         = (int)MathMax(0, InpPanelX);
    g_panelY         = (int)MathMax(0, InpPanelY);
    g_showPanel      = InpShowPanel;
@@ -945,6 +1183,7 @@ void LoadSettings()
    if(CfgHas("alert_sound")) { g_alertSound   = (CfgGet("alert_sound", 0.0) > 0.5); restored++; }
    if(CfgHas("alert_push"))  { g_alertPush    = (CfgGet("alert_push", 0.0) > 0.5); restored++; }
    if(CfgHas("verbose"))     { g_verbose      = (CfgGet("verbose", 0.0) > 0.5); restored++; }
+   if(CfgHas("heartbeat"))   { g_heartbeat    = ClampI((int)CfgGet("heartbeat", g_heartbeat), 0, 240); restored++; }
    if(restored > 0)
       Log("CONF", StringFormat("%d setting(s) restored from what you set on the chart last time", restored));
 }
@@ -1160,6 +1399,11 @@ bool AdjustSetting(const string id, const int dir)
    {
       g_verbose = !g_verbose;
       shown = (g_verbose ? "on" : "off");
+   }
+   else if(id == "heartbeat")
+   {
+      g_heartbeat = ClampI(g_heartbeat + dir * 5, 0, 240);
+      shown = (g_heartbeat <= 0 ? "off" : IntegerToString(g_heartbeat) + " min");
    }
    else
       return false;
@@ -1662,6 +1906,13 @@ void UiLine(const string key, const string text, const color clr, const int size
    g_uiY += (size <= 7 ? 12 : 14);
 }
 
+// a full width button, for a page that owns an action
+void UiWide(const string name, const string text, const color bg)
+{
+   UiButton(PANEL_TAG + name, g_uiX + PANEL_PAD, g_uiY, PANEL_W - 2 * PANEL_PAD, 20, text, bg, CLR_VALUE);
+   g_uiY += 24;
+}
+
 // a line with a label and a value and nothing to click
 void RowRead(const string key, const string label, const string value, const color clr)
 {
@@ -1781,6 +2032,23 @@ string RuleStateWord()
    return "waiting for a break";
 }
 
+// a line every InpHeartbeatMinutes, so you can see it is awake and watching
+// even on a quiet day; quiet, so it never replaces the last event on the panel
+void Heartbeat()
+{
+   if(g_heartbeat <= 0)
+      return;
+   if(g_lastBeat != 0 && TimeCurrent() - g_lastBeat < g_heartbeat * 60)
+      return;
+   g_lastBeat = TimeCurrent();
+   string firstFail = "";
+   int open = GatesOpen(firstFail);
+   string tail = (firstFail == "" ? "every gate is open" : "first closed gate: " + firstFail);
+   Log("ALIVE", StringFormat("%s %s, %s, %d of 11 gates open (%s), %s",
+                             _Symbol, PeriodDescription(g_tf), RuleStateWord(), open, tail,
+                             (OurPositions() > 0 ? "a position is open" : "flat")), true);
+}
+
 // what the next order would be sized to, at the stop the rule would pick now
 string LotsPreview()
 {
@@ -1860,12 +2128,12 @@ void UiHeader(const string pageTitle)
 
 void UiTabs()
 {
-   string names[8] = {"DASH", "RULE", "RISK", "CLOCK", "MANAGE", "LOG", "PACK", "HELP"};
-   int w = (PANEL_W - 2 * PANEL_PAD - 18) / 4;
-   for(int i = 0; i < 8; i++)
+   string names[9] = {"DASH", "RULE", "RISK", "CLOCK", "MANAGE", "LOG", "TEST", "PACK", "HELP"};
+   int w = (PANEL_W - 2 * PANEL_PAD - 24) / 5;
+   for(int i = 0; i < 9; i++)
    {
-      int row = i / 4;
-      int col = i % 4;
+      int row = i / 5;
+      int col = i % 5;
       int x = g_uiX + PANEL_PAD + col * (w + 6);
       int y = g_uiY + row * 20;
       UiButton(PANEL_TAG + "tab" + IntegerToString(i), x, y, w, 18, names[i],
@@ -1892,7 +2160,7 @@ void UiActions()
 
 void UiFooter()
 {
-   string foot = "v1.20  magic " + IntegerToString(g_magic) + "  " + (g_verbose ? "verbose" : "quiet") + " log";
+   string foot = "v1.21  magic " + IntegerToString(g_magic) + "  " + (g_verbose ? "verbose" : "quiet") + " log";
    UiText(PANEL_TAG + "foot", g_uiX + PANEL_PAD, g_uiY, foot, CLR_LABEL, 7, "Segoe UI",
           ANCHOR_LEFT_UPPER);
    g_uiY += 12;
@@ -2164,6 +2432,7 @@ void DrawManage()
 
    UiSection("lg", "THE LOG");
    RowToggle("verbose", "Every bar", g_verbose, (g_verbose ? "bar by bar" : "changes only"));
+   RowEdit("heartbeat", "Alive line", (g_heartbeat <= 0 ? "off" : IntegerToString(g_heartbeat) + " min"), CLR_VALUE);
 }
 
 //+------------------------------------------------------------------+
@@ -2195,7 +2464,57 @@ void DrawLog()
 }
 
 //+------------------------------------------------------------------+
-//| Page 7: the whole pack, and what the EA does with each skill      |
+//| Page 7: can it trade, and what exactly would it send              |
+//+------------------------------------------------------------------+
+void DrawTest()
+{
+   string detail = "";
+   string labels[11] = {"Toolbar", "Algo setting", "Account", "Broker EA", "Live guard", "Weekday",
+                        "Session", "Entries left", "Loss room", "Spread", "Market data"};
+   UiSection("chk", "CAN IT TRADE RIGHT NOW?");
+   for(int i = 0; i < 11; i++)
+   {
+      bool ok = GatePass(i, detail);
+      RowRead("g" + IntegerToString(i), labels[i], (ok ? "PASS" : "NO: " + detail),
+              ok ? CLR_GOOD : CLR_BAD);
+   }
+
+   string side = "", why = "";
+   double lots = 0.0, entry = 0.0, stop = 0.0, target = 0.0, distance = 0.0, margin = 0.0;
+   bool has = PreviewOrder(side, lots, entry, stop, target, distance, margin, why);
+
+   bool stopsOk = (has && distance >= MinStopPoints() * _Point);
+   RowRead("g11", "Stops distance", (stopsOk
+           ? DoubleToString(distance / _Point, 0) + " pts, over the broker's " + DoubleToString(MinStopPoints(), 0)
+           : "too tight: " + DoubleToString(distance / _Point, 0) + " pts"),
+           stopsOk ? CLR_GOOD : CLR_BAD);
+
+   double freeMargin = AccountInfoDouble(ACCOUNT_MARGIN_FREE);
+   bool marginOk = (has && margin > 0.0 && margin <= freeMargin * g_maxMarginPct / 100.0);
+   RowRead("g12", "Margin", (has ? Money(margin) + " of " + Money(freeMargin) : "no price"),
+           marginOk ? CLR_GOOD : CLR_BAD);
+
+   UiSection("would", "WHAT IT WOULD SEND");
+   RowRead("w_side", "Side / lots", (has ? side + "  " + DoubleToString(lots, 2) : "-"), CLR_VALUE);
+   RowRead("w_entry", "Entry", (has ? DoubleToString(entry, _Digits) : "-"), CLR_VALUE);
+   RowRead("w_stop", "Stop", (has ? DoubleToString(stop, _Digits) + "  (" +
+           DoubleToString(distance / _Point, 0) + " pts)" : "-"), CLR_VALUE);
+   RowRead("w_tp", "Target", (has ? DoubleToString(target, _Digits) + "  (" +
+           DoubleToString(g_minRR * distance / _Point, 0) + " pts, " + DoubleToString(g_minRR, 1) + "R)" : "-"),
+           CLR_VALUE);
+   color chkClr = CLR_LABEL;
+   if(StringFind(g_lastCheck, "ok") == 0)
+      chkClr = CLR_GOOD;
+   else if(StringFind(g_lastCheck, "no") == 0)
+      chkClr = CLR_BAD;
+   RowRead("w_chk", "Terminal check", g_lastCheck, chkClr);
+
+   UiWide("btn_check", "RUN ORDER CHECK (sends nothing)", CLR_BTN);
+   UiLine("chk_note", "OrderCheck validates and prices; it never sends", CLR_LABEL, 7);
+}
+
+//+------------------------------------------------------------------+
+//| Page 8: the whole pack, and what the EA does with each skill      |
 //+------------------------------------------------------------------+
 void DrawPack()
 {
@@ -2231,6 +2550,12 @@ void DrawHelp()
    UiLine("h4", "every click is saved with the chart", CLR_VALUE, 7);
    UiLine("h5", "RESET puts the inputs back, twice", CLR_WARN, 7);
 
+   UiSection("tst", "THE TEST PAGE");
+   UiLine("t1", "11 gates, PASS or NO, one by one", CLR_VALUE, 7);
+   UiLine("t2", "what it would send: side, lots, SL, TP", CLR_VALUE, 7);
+   UiLine("t3", "RUN ORDER CHECK: priced, never sent", CLR_VALUE, 7);
+   UiLine("t4", "ALIVE line in the log every heartbeat", CLR_LABEL, 7);
+
    UiSection("act", "THE FOUR BUTTONS");
    UiLine("a1", "PAUSE: no new entries, manage keeps", CLR_VALUE, 7);
    UiLine("a2", "DRY: signals logged, nothing sent", CLR_VALUE, 7);
@@ -2242,6 +2567,7 @@ void DrawHelp()
    UiLine("s2", "it only trades its own magic number", CLR_LABEL, 7);
    UiLine("s3", "a stop is a plan, not a guarantee", CLR_LABEL, 7);
    UiLine("s4", "demo first, always", CLR_LABEL, 7);
+   UiLine("s5", "offline: no web, no sockets, no DLL", CLR_GOOD, 7);
 }
 
 //+------------------------------------------------------------------+
@@ -2266,8 +2592,9 @@ void UpdatePanel()
    if(g_page < 0 || g_page >= PAGE_COUNT)
       g_page = 0;
 
-   string titles[8] = {"the day at a glance", "the rule", "risk and size", "the clock",
-                       "managing the trade", "console and journal", "the whole pack", "how to use this"};
+   string titles[9] = {"the day at a glance", "the rule", "risk and size", "the clock",
+                       "managing the trade", "console and journal", "can it trade",
+                       "the whole pack", "how to use this"};
    UiHeader(titles[g_page]);
    UiTabs();
 
@@ -2284,6 +2611,8 @@ void UpdatePanel()
    else if(g_page == 5)
       DrawLog();
    else if(g_page == 6)
+      DrawTest();
+   else if(g_page == 7)
       DrawPack();
    else
       DrawHelp();
@@ -2356,6 +2685,11 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
          Log("CTRL", "CLOSE OUR confirmed by the second click");
          CloseAllOurs(MinutesOfDay(ToNewYork(TimeCurrent())), "closed from the dashboard");
       }
+   }
+   else if(sparam == prefix + "btn_check")
+   {
+      ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
+      RunOrderCheck();
    }
    else if(sparam == prefix + "btn_reset")
    {
@@ -2460,7 +2794,7 @@ int OnInit()
 
    // the banner, then the whole configuration as a small table
    Log("INIT", "-------------------------------------------------------------");
-   Log("INIT", "DayTraderMT5 v1.20 on " + _Symbol + " " + PeriodDescription(g_tf) +
+   Log("INIT", "DayTraderMT5 v1.21 on " + _Symbol + " " + PeriodDescription(g_tf) +
               ", account " + AccountModeWord() + " #" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) +
               ", magic " + IntegerToString(g_magic));
    Log("INIT", "-------------------------------------------------------------");
@@ -2522,8 +2856,18 @@ int OnInit()
    if(g_liveBlocked)
       Log("GATE", "REAL account and InpAllowLive is false: this EA will read and log, and will not trade. "
                   "Switch to a demo account, or set InpAllowLive to true on purpose.");
-   Log("INIT", "dashboard: " + (g_showPanel ? "8 pages, click a tab; every row with [-] [+] is live"
-                                            : "off (InpShowPanel)"));
+   string firstFail = "";
+   int openGates = GatesOpen(firstFail);
+   if(firstFail == "")
+      Log("GATE", "all 11 gates are open: an entry would be sent on the next break");
+   else
+      Log("GATE", StringFormat("%d of 11 gates open, the first closed one: %s", openGates, firstFail));
+
+   Log("INIT", "this EA is offline: no WebRequest, no sockets, no DLL, no include beyond Trade.mqh. "
+               "It only talks to your terminal, and your terminal only talks to your broker.");
+   Log("INIT", "dashboard: " + (g_showPanel ? "9 pages, click a tab; every row with [-] [+] is live"
+                                            : "off (InpShowPanel)") +
+               ". TEST page proves it can trade and shows the exact SL and TP.");
    Log("INIT", "-------------------------------------------------------------");
 
    EventSetTimer(5);
@@ -2559,6 +2903,7 @@ void OnTimer()
       g_confirmReset = false;
       Log("CTRL", "RESET expired after 6 seconds: nothing was reset", true);
    }
+   Heartbeat();
    UpdatePanel();
 }
 

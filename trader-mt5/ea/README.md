@@ -102,10 +102,12 @@ until you set `InpAllowLive = true`, on purpose, and it says so in the log.
 Every input has a one-line comment next to it in MetaTrader's input dialog, so
 you do not have to come back to this table.
 
-## The dashboard: eight pages, every number one click
+## The dashboard: nine pages, every number one click
 
 Attach the EA and the chart gets a dashboard. It is drawn with chart objects, so
-there is nothing to install, no DLL, no file. Eight tabs, two rows of four:
+there is nothing to install, no DLL, no file. Nine tabs, two rows (five and four).
+It starts 96 pixels down, below the terminal's own buy/sell corner, so the One
+Click Trading buttons stay visible; move it with `InpPanelX` / `InpPanelY`:
 
 | page | what is on it |
 | --- | --- |
@@ -115,6 +117,7 @@ there is nothing to install, no DLL, no file. Eight tabs, two rows of four:
 | `CLOCK` | the New York switch, session start and end, flat-by, weekdays only - plus what time it is there and how long until flat-by |
 | `MANAGE` | breakeven, trailing, partial, slippage, stop buffer, the three alert switches, and the verbose log |
 | `LOG` | the last eight console lines, on the chart, and today's journal: closed trades, wins/losses, net, the last one |
+| `TEST` | can it trade right now (eleven gates, PASS or NO, and the two that need a price: stops distance and margin) and the exact order it would send; one button, `RUN ORDER CHECK`, hands that order to the terminal's own `OrderCheck` so you get the broker's verdict without a single order being sent |
 | `PACK` | every skill in the pack, and honestly: what lives inside this EA and what stays in the Python desk |
 | `HELP` | how the panel works, what the four buttons do, and the safety lines |
 
@@ -131,6 +134,29 @@ The four buttons at the bottom:
 - **DRY OFF / DRY ON**: signal-only mode, live, without touching the inputs.
 - **CLOSE OUR**: two clicks within six seconds, and only on its own magic number.
 - **RESET**: two clicks, and every setting goes back to the inputs.
+
+### Proving it trades, without trading
+
+Two questions worth asking any EA: does it phone home, and would the terminal
+really take its order with a stop and a target?
+
+- **It is offline.** No `WebRequest`, no sockets, no `URLDownloadToFile`, no
+  `#import`, and one include: `<Trade\Trade.mqh>`, which ships with MetaTrader. It
+  talks to your terminal, and your terminal talks to your broker. The only thing
+  that can leave the machine is the optional phone push (`InpAlertPush`), which
+  is off by default and goes to your own MetaQuotes ID. `tests/test_ea.py` checks
+  the file for every one of those calls.
+- **The TEST page proves the order.** Eleven gates listed one by one with PASS or
+  NO and the reason, then the exact order it would send right now: side, lots,
+  entry, stop, target, distances in points and R, and the margin. `RUN ORDER
+  CHECK` sends that request through `OrderCheck()`, which validates symbol,
+  volume, stops level, margin and filling mode and prices it - and sends nothing.
+  You get `CHECK | ... the terminal accepted the whole order ... Nothing was sent`
+  or the broker's retcode, in one line.
+- **A heartbeat.** Every `InpHeartbeatMinutes` (15 by default) the log gets one
+  `ALIVE` line: the symbol, the bar size, where the rule is, how many of the
+  eleven gates are open, and the first closed one. On a quiet day that is your
+  proof the EA is awake and watching.
 
 ### The console
 

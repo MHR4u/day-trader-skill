@@ -201,10 +201,15 @@ chart, and the terminal trades it by itself: the opening-range breakout, the
 ATR stop, the R target, risk-percent sizing, the spread and stops-level gates,
 one trade a day, a daily loss stop, breakeven, trailing, a partial, and a
 flat-by time. Demo by default; a REAL account needs `InpAllowLive`. It reports
-in two places: an eight-page dashboard on the chart where every number is one
+in two places: a nine-page dashboard on the chart where every number is one
 click away (`[-]` `[+]`, `ON/OFF`, `<` `>`, saved with the chart, plus `PAUSE`,
 `DRY`, `CLOSE OUR` and `RESET` buttons), and a tagged console line for every
-decision (`time | TAG | what happened`) in the Experts log. The install
+decision (`time | TAG | what happened`) in the Experts log. Its `TEST` page lists
+the eleven gates and hands the exact order it would send to the terminal's own
+`OrderCheck`, so "will it really trade, with a stop and a target?" has an answer
+that costs nothing: the verdict, and no order. The EA is offline - no web calls,
+no DLL, no import beyond `Trade.mqh` - and an `ALIVE` line in the log says it is
+awake. The install
 walkthrough is in `trader-mt5/ea/README.md`, and every message, panel row, click
 step and input is decoded in `trader-mt5/ea/CONSOLE.md`.
 

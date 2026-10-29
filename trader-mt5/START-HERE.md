@@ -64,7 +64,7 @@ khud trade karta hai, aap ko har order par "yes" nahi dena parta.
    `Tools > Options > Expert Advisors > Allow algorithmic trading` ON.
 4. **M5 chart** kholein (jo symbol trade karna hai), Navigator se
    `DayTraderMT5` chart par drag karein, `Allow algorithmic trading` tick karein.
-5. Chart par dashboard (gehra neela panel) aata hai, 8 pages ke sath:
+5. Chart par dashboard (gehra neela panel) aata hai, 9 pages ke sath:
    `DASH` (symbol, New York waqt, session, opening range, EMA, ATR, spread,
    aaj ke entries, realised P/L, khuli trade ka stop/target/R, risk, aur
    `Trading: yes` ya `no: <wajah>`), `RULE`, `RISK`, `CLOCK`, `MANAGE`,
@@ -77,6 +77,12 @@ khud trade karta hai, aap ko har order par "yes" nahi dena parta.
      inputs par wapas).
    - `LOG` page par aakhri 8 console lines aur aaj ka journal chart par hi
      dikhta hai.
+   - `TEST` page se pata chalta hai ke ye sach mein trade lega ya nahi: 11 gates
+     PASS/NO, phir wahi order jo abhi jayega (side, lots, SL, TP, margin) aur
+     `RUN ORDER CHECK` button - terminal khud batata hai ke qabool hoga, aur
+     **kuch bhejta nahi**.
+   - Panel 96 pixel neeche se shuru hota hai taake terminal ke Buy/Sell buttons
+     na chhupen (`InpPanelY` se badal sakte hain).
 6. `Toolbox > Experts` tab mein har faisla ek line mein aata hai, tag ke sath:
    `time | TAG | baat`, jaise
    `14:05:33 | SIGNAL | BUY signal: M5 closed 2394.12, above the range ...`,

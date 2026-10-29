@@ -13,12 +13,13 @@ EA_DIR = os.path.join(ROOT, "trader-mt5", "ea")
 EA = os.path.join(EA_DIR, "DayTraderMT5.mq5")
 
 ENTRY_POINTS = ["OnInit", "OnDeinit", "OnTimer", "OnTick", "OnChartEvent"]
-PAGES = ["DrawDash", "DrawRule", "DrawRisk", "DrawClock", "DrawManage", "DrawLog", "DrawPack", "DrawHelp"]
+PAGES = ["DrawDash", "DrawRule", "DrawRisk", "DrawClock", "DrawManage", "DrawLog",
+         "DrawTest", "DrawPack", "DrawHelp"]
 SECTIONS = ["MARKET", "OPENING RANGE", "INDICATORS", "TODAY", "POSITION", "RISK AND SIZE", "STATUS"]
 
 # one tag per kind of line the console can print
 TAGS = ["INIT", "CONF", "GATE", "RULE", "SIGNAL", "BLOCK", "SIZE", "RISK",
-        "ORDER", "MANAGE", "FLAT", "CTRL", "ERROR", "DAY", "STOP"]
+        "ORDER", "MANAGE", "FLAT", "CTRL", "ERROR", "DAY", "STOP", "CHECK", "ALIVE"]
 
 ROW_CALL = re.compile(r'Row(?:Read|Edit|Cycle|Toggle)\("([A-Za-z_0-9]+)"')
 EDITABLE = re.compile(r'Row(?:Edit|Cycle|Toggle)\("([A-Za-z_0-9]+)"')
@@ -97,8 +98,8 @@ class TheFile(unittest.TestCase):
         text = source()
         version = re.search(r'#property version\s+"([0-9.]+)"', text)
         self.assertIsNotNone(version)
-        self.assertEqual(version.group(1), "1.20")
-        self.assertIn("v1.20", text, "the banner and the panel footer name the version")
+        self.assertEqual(version.group(1), "1.21")
+        self.assertIn("v1.21", text, "the banner and the panel footer name the version")
         self.assertIn("#property copyright", text)
         self.assertIn("#property link", text)
 
@@ -205,7 +206,7 @@ class TheDashboard(unittest.TestCase):
         for page in PAGES:
             self.assertIn(page + "()", panel, page)
         tabs = body_of(text, "UiTabs")
-        for label in ("DASH", "RULE", "RISK", "CLOCK", "MANAGE", "LOG", "PACK", "HELP"):
+        for label in ("DASH", "RULE", "RISK", "CLOCK", "MANAGE", "LOG", "TEST", "PACK", "HELP"):
             self.assertIn('"%s"' % label, tabs, label)
         # a tab click lands on SetPage, which redraws the new page
         self.assertIn("SetPage(", body_of(text, "OnChartEvent"))
@@ -321,3 +322,67 @@ class TheGuards(unittest.TestCase):
         # and nothing else in the file sends an order
         self.assertEqual(text.count("g_trade.Buy("), 1)
         self.assertEqual(text.count("g_trade.Sell("), 1)
+
+
+class TheProof(unittest.TestCase):
+    """Two questions the user is entitled to ask: does it talk to anyone but my
+    broker, and would the terminal really take its order with a stop and a
+    target? Both are answered in code, and both are checked here."""
+
+    def test_it_is_offline(self):
+        text = source()
+        for call in ("WebRequest(", "SocketCreate(", "SocketConnect(", "SocketSend(",
+                     "URLDownloadToFile(", "InternetOpen", "#import", "DllImport"):
+            self.assertNotIn(call, text, call)
+
+    def test_the_only_push_is_switched_off(self):
+        text = source()
+        self.assertIn("SendNotification(", text)          # the optional phone push
+        self.assertRegex(text, r"InpAlertPush\s*=\s*false;")
+        notify = body_of(text, "Notify")
+        self.assertIn("g_alertPush", notify)
+
+    def test_it_never_calls_ordersend_directly(self):
+        """CTrade owns the send; the check path only validates."""
+        text = source()
+        self.assertNotIn("OrderSend(", text)
+        # "RunOrderCheck" starts with "OrderCheck", so count the real calls
+        calls = len(re.findall(r"(?<!Run)OrderCheck\(", code_only(text)))
+        self.assertEqual(calls, 1, "one place validates, and it is not a sender")
+        check = body_of(text, "RunOrderCheck")
+        self.assertIn("OrderCheck(", check)
+        self.assertNotIn("TRADE_ACTION_", check.replace("TRADE_ACTION_DEAL", ""))
+        self.assertIn("never sent", check)
+
+    def test_the_order_check_uses_the_real_stop_and_target(self):
+        check = body_of(source(), "RunOrderCheck")
+        for field in ("request.sl", "request.tp", "request.volume", "request.price",
+                      "request.deviation", "request.magic"):
+            self.assertIn(field, check, field)
+        preview = body_of(source(), "PreviewOrder")
+        self.assertIn("g_minRR", preview)
+        self.assertIn("MinStopPoints()", preview)
+        self.assertIn("SizeLots(", preview)
+
+    def test_the_test_page_names_every_gate(self):
+        page = body_of(source(), "DrawTest")
+        self.assertIn("CAN IT TRADE RIGHT NOW?", page)
+        self.assertIn("GatePass(", page)
+        self.assertIn("PreviewOrder(", page)
+        self.assertIn('UiWide("btn_check"', page)
+        self.assertIn('"btn_check"', body_of(source(), "OnChartEvent"))
+        gates = body_of(source(), "GatePass")
+        self.assertGreaterEqual(gates.count("if(which =="), 11)
+
+    def test_there_is_a_heartbeat(self):
+        text = source()
+        self.assertIn("void Heartbeat(", text)
+        self.assertIn("Heartbeat();", body_of(text, "OnTimer"))
+        self.assertIn("InpHeartbeatMinutes", text)
+        self.assertIn("GatesOpen(", body_of(text, "Heartbeat"))
+
+    def test_the_panel_starts_below_the_buy_sell_corner(self):
+        text = source()
+        y = re.search(r"InpPanelY\s*=\s*(\d+);", text)
+        self.assertIsNotNone(y)
+        self.assertGreaterEqual(int(y.group(1)), 80, "the one click trading corner lives at the top left")

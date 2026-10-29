@@ -8,11 +8,15 @@ Ye file sirf `DayTraderMT5.mq5` ke bare mein hai. Do hisse hain:
 Dono ka ek hi maqsad: aapko har waqt pata ho ke EA ne kya dekha, kya socha,
 kya kiya, aur agar kuch nahi kiya to kyun nahi kiya.
 
-**v1.20:** dashboard ab 8 pages ka hai (DASH, RULE, RISK, CLOCK, MANAGE, LOG,
-PACK, HELP), aur har number chart par hi **click se badalta** hai: `[-]` `[+]`
-se number, `ON/OFF` se switch, `<` `>` se list. Jo aap click karte hain wo
+**v1.21:** dashboard 9 pages ka hai (DASH, RULE, RISK, CLOCK, MANAGE, LOG,
+TEST, PACK, HELP), aur har number chart par hi **click se badalta** hai: `[-]`
+`[+]` se number, `ON/OFF` se switch, `<` `>` se list. Jo aap click karte hain wo
 terminal ke global variables mein save ho jata hai, is liye chart band kar ke
 wapas kholen to bhi aap ki tuning barqarar rehti hai.
+
+Do sawal har EA se poochne chahiye: kya ye internet par baat karta hai (jawab:
+nahi, section 16), aur kya terminal is ka order sach mein le lega (jawab: TEST
+page, section 11.7 - gates aur `RUN ORDER CHECK`).
 
 Install steps `README.md` mein hain. Ye file sirf "kaunsi line ka kya matlab hai"
 aur "panel ke kis khaane ka kya matlab hai" ke liye hai.
@@ -63,9 +67,9 @@ function ke andar, is liye har line ka format ek jaisa hai.
 
 | tag | kab aata hai | aap ko kya batata hai |
 | --- | --- | --- |
-| `INIT` | EA chart par lagte waqt | version, symbol, account, magic, banner |
+| `INIT` | EA chart par lagte waqt | version, symbol, account, magic, banner, aur ye ke EA offline hai |
 | `CONF` | wahin, startup par | poora config: rule, stop, clock, risk, limits, broker levels, manage |
-| `GATE` | startup par, aur jab trade rukta ho | terminal/account/broker ki ijazat, ya `InpAllowLive` ki deewar |
+| `GATE` | startup par, aur jab trade rukta ho | terminal/account/broker ki ijazat, 11 gates ka hisaab, ya `InpAllowLive` ki deewar |
 | `RULE` | haalat badalne par (ya har bar, verbose mein) | range ban raha hai, ban gaya, wait, kya close hua |
 | `SIGNAL` | jab break milta hai | taraf, close, range, trend |
 | `BLOCK` | signal mila par order nahi gaya | **wajah**, ek line mein |
@@ -78,6 +82,8 @@ function ke andar, is liye har line ka format ek jaisa hai.
 | `ERROR` | jo kaam nahi hua | broker ka retcode, ya terminal ka error |
 | `DAY` | New York mein naya din | aaj ki session, flat-by |
 | `STOP` | EA hatne par | reason code (0, 1, 2, 3, 4) |
+| `CHECK` | TEST page ka button | terminal ne order qabool kiya ya mana, margin ke sath |
+| `ALIVE` | har heartbeat (default 15 min) | EA zinda hai, rule kahan hai, kitne gates khule |
 
 ---
 
@@ -96,7 +102,9 @@ function ke andar, is liye har line ka format ek jaisa hai.
 2026.10.29 13:58:02 | CONF  | levels    : contract 100, tick value 1.00, volume 0.01 to 50.00 step 0.01
 2026.10.29 13:58:02 | CONF  | manage    : breakeven 1.00R, trail 1.00R / 150 points, partial off
 2026.10.29 13:58:02 | GATE  | trading is allowed: the terminal, the account and the broker all agree
-2026.10.29 13:58:02 | INIT  | dashboard: on the chart, with PAUSE, DRY and CLOSE OURS
+2026.10.29 13:58:02 | GATE  | all 11 gates are open: an entry would be sent on the next break
+| INIT  | this EA is offline: no WebRequest, no sockets, no DLL, no include beyond Trade.mqh
+| INIT  | dashboard: 9 pages, click a tab; every row with [-] [+] is live
 2026.10.29 13:58:02 | INIT  | -------------------------------------------------------------
 ```
 
@@ -277,7 +285,7 @@ inputs badle, `4` timeframe badla. `2` se `4` par EA dobara `INIT` banner deta h
 
 ---
 
-## 11. Dashboard: chart par panel, 8 pages
+## 11. Dashboard: chart par panel, 9 pages
 
 Panel chart objects se banta hai: koi DLL nahi, koi file nahi, koi resource nahi.
 Ek dafa banta hai, phir sirf text badalta hai, is liye chart slow nahi hota. Page
@@ -287,8 +295,8 @@ badalne par purane page ke objects hata diye jate hain, naye ban jate hain.
 +----------------------------------------------------+
 | DayTraderMT5  the day at a glance          DEMO    |   header: naam, page, account type
 +----------------------------------------------------+
-| [ DASH ] [ RULE ] [ RISK ] [ CLOCK ]               |   8 tabs, 2 rows, active tab neela
-| [ MANAGE ] [ LOG ] [ PACK ] [ HELP ]               |
+| [DASH][RULE][RISK][CLOCK][MANAGE]                  |   9 tabs, 2 rows, active tab neela
+| [ LOG ][ TEST ][ PACK ][ HELP ]                    |
 +----------------------------------------------------+
 | = MARKET                                           |
 |   Symbol / rule   XAUUSD  M5                       |
@@ -298,7 +306,7 @@ badalne par purane page ke objects hata diye jate hain, naye ban jate hain.
 | = OPENING RANGE ...  (yahi 7 sections DASH par)    |
 | ...                                                |
 |  [ PAUSE ] [ DRY OFF ] [ CLOSE OUR ] [ RESET ]     |
-| v1.20  magic 20261019  quiet log                   |
+| v1.21  magic 20261019  quiet log                   |
 +----------------------------------------------------+
 ```
 
@@ -378,6 +386,7 @@ khud 60 minute ka farq kar deta hai aur console par likh deta hai.
 | Stop buffer | `[-]` `[+]` | 5 points | 0 se 500 |
 | Popup alert / Sound / Push | `ON/OFF` | - | - |
 | Every bar (verbose) | `ON/OFF` | - | - |
+| Alive line | `[-]` `[+]` | 5 min | 0 (off) se 240 |
 
 Read-only: broker ka stops level (buffer ke sath), aur broker ka **last answer**
 (`done`, `10016`, `10009`...). Yeh wahi `g_lastRetcode` hai jo `ERROR` line mein aata hai.
@@ -391,7 +400,55 @@ Read-only: broker ka stops level (buffer ke sath), aur broker ka **last answer**
 
 Log file kholne ki zaroorat nahi: chart par hi pata chal jata hai ke kya hua.
 
-### 11.7 Page PACK - poora day-trader pack, kaun hissa kahan
+### 11.7 Page TEST - "kya ye sach mein trade lega?"
+
+Yeh page do sawalon ka jawab deta hai, dono **koi order bheje baghair**.
+
+**CAN IT TRADE RIGHT NOW?** - 11 gates, ek ek, `PASS` (hara) yaa `NO: <wajah>` (lal):
+
+| # | gate | PASS kab |
+| --- | --- | --- |
+| 1 | Toolbar | terminal ka AutoTrading button on |
+| 2 | Algo setting | `Tools > Options > Expert Advisors > Allow algorithmic trading` on |
+| 3 | Account | account trade kar sakta hai (investor password nahi) |
+| 4 | Broker EA | broker ne is account par EA band nahi kiya |
+| 5 | Live guard | REAL nahi, yaa `InpAllowLive = true` |
+| 6 | Weekday | Sat/Sun nahi (ya weekdays-only off) |
+| 7 | Session | New York ke session ke andar |
+| 8 | Entries left | aaj ka quota baqi hai |
+| 9 | Loss room | daily loss stop hit nahi hua |
+| 10 | Spread | spread ceiling ke andar |
+| 11 | Market data | bars aur ATR maujood |
+
+Uske baad do hisaab wale gates: **Stops distance** (stop broker ki kam se kam
+doori se bahar hai ya nahi) aur **Margin** (order ki margin free margin ke aap
+ke cap ke andar hai ya nahi).
+
+**WHAT IT WOULD SEND** - bilkul wahi order jo rule abhi bhejta:
+
+| row | matlab |
+| --- | --- |
+| Side / lots | BUY yaa SELL, aur kitne lots (risk budget se) |
+| Entry | abhi ka ask (buy) yaa bid (sell) |
+| Stop | SL ki price aur points mein doori |
+| Target | TP ki price, points, aur R |
+| Terminal check | `-` (abhi test nahi hua), `ok: margin ...`, yaa `no: <retcode> <comment>` |
+
+Neeche bada button: **RUN ORDER CHECK (sends nothing)**. Ye EA ka poora order
+(prices, lots, SL, TP, deviation, filling mode, magic) terminal ke apne
+`OrderCheck()` mein daalta hai. Terminal wahi validation karta hai jo asli order
+par karta: symbol trade ho sakta hai? volume ladder theek? stops level ke andar?
+margin hai? filling mode supported? - aur **kuch bhejta nahi**. Jawab console par:
+
+```
+| CHECK | BUY XAUUSD 0.42 lots at 2394.10, stop 2387.40, target 2404.20: the terminal accepted the whole order and priced the margin at 152.30 USD. Nothing was sent.
+| CHECK | BUY XAUUSD 0.42 lots: the terminal refused it, 10016 invalid stops. Nothing was sent.
+```
+
+`10016` aaye to MANAGE page par **Stop buffer** barha dein. Ye page har 5 second
+refresh hota hai, is liye session khulne par gates khud badalte dikhte hain.
+
+### 11.8 Page PACK - poora day-trader pack, kaun hissa kahan
 
 | row | kya dikhata hai |
 | --- | --- |
@@ -408,12 +465,12 @@ Log file kholne ki zaroorat nahi: chart par hi pata chal jata hai ke kya hua.
 Aakhri line saaf likhti hai: **those read the web; the EA stays offline**. Yani
 jo cheez EA ke andar nahi hai, wo jhooti tarah andar dikhayi nahi jati.
 
-### 11.8 Page HELP - kaise chalayein
+### 11.9 Page HELP - kaise chalayein
 
 Chhota card: tabs, `[-]` `[+]`, `ON/OFF`, `<` `>`, save, RESET, chaar button ka
 matlab, aur safety (`REAL` ke liye `InpAllowLive`, apna magic, demo pehle).
 
-### 11.9 Chaar buttons (har page par neeche)
+### 11.10 Chaar buttons (har page par neeche)
 
 | button | pehla click | doosra click | rang |
 | --- | --- | --- | --- |
@@ -426,7 +483,7 @@ matlab, aur safety (`REAL` ke liye `InpAllowLive`, apna magic, demo pehle).
 chalte rehte hain. `RESET` poore panel ki tuning ko inputs par le jata hai (page
 ka nahi, sab ka) - is liye do click.
 
-### 11.10 Click badlav kahan save hota hai
+### 11.11 Click badlav kahan save hota hai
 
 Har click par EA poora table `GlobalVariable` mein likhta hai:
 
@@ -439,9 +496,15 @@ Isi liye chart band karke wapas kholen, timeframe badlein, yaa terminal restart
 karein - aap ki tuning wapas milti hai (`CONF ... N setting(s) restored ...`).
 `RESET` in keys ko delete karta hai aur `Inputs` wale numbers wapas le aata hai.
 `InpShowPanel = false` panel ko poori tarah band karta hai; `InpPanelX/Y` us ki
-jagah badalte hain (pixels, left/top se).
+jagah badalte hain (pixels, left/top se). Default `InpPanelY = 96` hai, kyunki
+MT5 ka apna **buy/sell corner** (One Click Trading) chart ke top-left par hota
+hai - panel us ke neeche shuru hota hai taake Buy aur Sell buttons chhupe nahi.
+Agar aap ke terminal mein One Click Trading off hai aur upar jagah khali hai, to
+`InpPanelY` ko 30 kar dein; aur agar chart window chhoti hai aur panel neeche se
+screen se bahar ja raha hai to 60 karein, yaa `InpShowPanel = false` karke sirf
+console par kaam karein.
 
-## 12. Har input, ek ek (39 inputs, 8 groups)
+## 12. Har input, ek ek (40 inputs, 8 groups)
 
 Inputs factory settings hain. Panel se jo badla jata hai wo un ke upar chalta hai
 (aur save rehta hai); `RESET` sab inputs par wapas le aata hai.
@@ -519,7 +582,8 @@ Alerts entry ke waqt nahi, **fill** aur **close** par aate hain.
 | --- | --- | --- |
 | `InpShowPanel` | `true` | dashboard on/off |
 | `InpPanelX` | `14` | left se doori, pixels |
-| `InpPanelY` | `24` | top se doori, pixels |
+| `InpPanelY` | `96` | top se doori, pixels (buy/sell corner ke neeche) |
+| `InpHeartbeatMinutes` | `15` | itne minute par `ALIVE` line (0 = off) |
 | `InpVerbose` | `false` | har bar par RULE line (panel ka `Every bar`) |
 
 ### Plumbing
@@ -553,7 +617,8 @@ nahi manta).
 | Entry | `TryEntry` | darwaze, stop, target, size, send |
 | Manage | `ManagePositions`, `CloseAllOurs` | breakeven, trailing, partial, flat-by |
 | Widgets | `DeletePanel`, `UiRect`, `UiText`, `UiButton`, `Clamp01`, `UiBar`, `UiSection`, `UiLine`, `RowRead`, `RowEdit`, `RowCycle`, `RowToggle` | panel ke teen object types aur un ke rows |
-| Pages | `NyWord`, `SessionFraction`, `OurPosition`, `RuleStateWord`, `LotsPreview`, `JournalToday`, `UiHeader`, `UiTabs`, `UiActions`, `UiFooter`, `DrawDash`, `DrawRule`, `DrawRisk`, `DrawClock`, `DrawManage`, `DrawLog`, `DrawPack`, `DrawHelp`, `UpdatePanel`, `SetPage` | 8 pages, tabs, bottom bar, aur page badalna |
+| Self check | `FillingForSymbol`, `PreviewOrder`, `GatePass`, `GatesOpen`, `RunOrderCheck` | 11 gates, order ka preview, aur terminal ka `OrderCheck` (bhejta nahi) |
+| Pages | `NyWord`, `SessionFraction`, `OurPosition`, `RuleStateWord`, `Heartbeat`, `LotsPreview`, `JournalToday`, `UiHeader`, `UiTabs`, `UiActions`, `UiFooter`, `UiWide`, `DrawDash`, `DrawRule`, `DrawRisk`, `DrawClock`, `DrawManage`, `DrawLog`, `DrawTest`, `DrawPack`, `DrawHelp`, `UpdatePanel`, `SetPage` | 9 pages, tabs, bottom bar, page badalna, aur `ALIVE` heartbeat |
 | Entry points | `OnChartEvent`, `OnInit`, `OnDeinit`, `OnTimer`, `OnTick` | MT5 ke 5 callbacks |
 
 `OnTick` ka order hamesha yahi hai: **naya din check -> flat-by -> manage -> naye
@@ -590,6 +655,12 @@ leta hai; `act` = `_dn`, `_up`, `_nx`, `_pv` yaa `_tg`.
 | `RESET` ne kuch nahi kiya | do click chahiye, 6 second ke andar |
 | setting badalne par purani wapas aa gayi | chart par save hota hai; `RESET` se inputs wapas |
 | `SURE?` 6 second baad gayab | confirm nahi hua, dobara click karein |
+| `CHECK ... accepted the whole order ... Nothing was sent` | sab theek hai: broker is order ko le lega |
+| `CHECK ... refused it, 10016 invalid stops` | MANAGE > Stop buffer 20-30, phir dobara check |
+| `CHECK ... refused it, 10019 no money` | lot cap / risk kam, ya margin cap |
+| `CHECK ... refused it, 10018` | market band hai, session ke waqt check karein |
+| `CHECK ... cannot build an order to test: no ATR yet` | chart mein history kam hai; F5 / scroll left |
+| `ALIVE` line nahi aa rahi | `InpHeartbeatMinutes = 0` hai, yaa EA chart par nahi |
 | `send notification` ka error | `alert_push` off kar dein, ya MetaQuotes ID set karein |
 
 ---
@@ -611,7 +682,44 @@ Ye wahi lines hain jo `dtcli` aur Python desk (`trader-mt5/mt5.py history`,
 
 ---
 
-## 16. Yaad rakhein
+## 16. Ye internet se baat karta hai? Nahi.
+
+Seedha jawab: **is EA ka koi server nahi hai**. Na hamara, na kisi ka. Wo sirf do
+cheezon se baat karta hai:
+
+1. **aap ka MetaTrader 5 terminal** (chart objects, indicators, prices, orders),
+2. aur terminal khud **aap ke broker** se.
+
+File mein aisa kuch maujood nahi:
+
+| cheez | file mein? |
+| --- | --- |
+| `WebRequest()` (HTTP) | nahi |
+| `SocketCreate` / `SocketConnect` / `SocketSend` (raw internet) | nahi |
+| `URLDownloadToFile()` | nahi |
+| `#import` / DLL calls | nahi |
+| `FileOpen` se internet | nahi (EA koi file likhta bhi nahi) |
+| `#include` | sirf `<Trade\Trade.mqh>`, jo MetaTrader ke sath aata hai |
+
+Do cheezein aap ko "network" jaisi lag sakti hain, dono saaf hain:
+
+- **`SendNotification()`** (phone push) - ye MetaQuotes ke push system se aap ke
+  **apne** MetaQuotes ID par jata hai. Default **off** hai (`InpAlertPush = false`);
+  jab tak aap khud on na karein, kuch nahi jata. Panel se bhi on/off ho sakta hai.
+- **Global variables** (`DTMT5_C_*`, `DTMT5_<magic>_*`) - ye aap ke terminal ki
+  apni memory mein rehte hain, disk par terminal ke folder mein. Kahin nahi jate.
+
+Khud tasdeeq karein: MetaEditor mein `Ctrl+F` karke `WebRequest`, `Socket`,
+`URLDownload`, `#import` search karein - kuch nahi milega. Automated test bhi
+yahi check karta hai (`tests/test_ea.py`, `test_it_is_offline`).
+
+Aur "kya ye trade lega" ka sabse pakka jawab **TEST page** hai (section 11.7):
+11 gates PASS/NO, aur `RUN ORDER CHECK` jo terminal se poochta hai ke ye order
+qabool hoga ya nahi - bhejta kuch nahi.
+
+---
+
+## 17. Yaad rakhein
 
 - Ye **financial advice nahi** hai. Zyada tar day traders paisa kho dete hain.
 - Demo par pehle. REAL account `InpAllowLive = true` ke bagair band rehta hai.
