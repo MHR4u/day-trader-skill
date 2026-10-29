@@ -1,0 +1,50 @@
+name: build-exe
+
+# Builds the single-file dtcli.exe on a real Windows machine. PyInstaller
+# cannot cross compile, so this is where the Windows binary comes from.
+on:
+  push:
+    branches: ["main", "arena/**"]
+    paths:
+      - ".github/workflows/build-exe.yml"
+      - "trader-mt5/dtcli.py"
+      - "trader-mt5/daytrader.spec"
+      - "trader-*/**.py"
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install the build tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller MetaTrader5
+
+      - name: The suite still passes on Windows
+        run: python -m unittest discover -s tests
+
+      - name: Build dtcli.exe
+        run: pyinstaller --clean --noconfirm trader-mt5/daytrader.spec
+
+      - name: Smoke test the binary (no Python involved)
+        shell: cmd
+        run: |
+          dist\dtcli.exe env
+          dist\dtcli.exe list
+          dist\dtcli.exe --version
+          dist\dtcli.exe mt5 --replay tests\fixtures\trader-mt5\context.json --now "2026-10-20 09:35" account
+          dist\dtcli.exe mt5 --replay tests\fixtures\trader-mt5\context.json --now "2026-10-20 09:35" scan --symbols EURUSD --tf M15
+          dist\dtcli.exe ticket --help
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dtcli-windows
+          path: dist/dtcli.exe
+          if-no-files-found: error

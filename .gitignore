@@ -3,3 +3,7 @@ trader/
 __pycache__/
 *.pyc
 .DS_Store
+# PyInstaller output
+build/
+dist/
+*.spec.bak
