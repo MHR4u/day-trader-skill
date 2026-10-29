@@ -13,6 +13,9 @@ on:
       - "trader-*/**.py"
   workflow_dispatch:
 
+permissions:
+  contents: write            # to publish the built exe as a release asset
+
 jobs:
   windows:
     runs-on: windows-latest
@@ -73,6 +76,21 @@ jobs:
             dist/dtcli.exe
             ${{ runner.temp }}/test-log.txt
           if-no-files-found: warn
+
+      # A plain download link, so nobody has to dig through artifacts:
+      # https://github.com/MHR4u/day-trader-skill/releases/download/dtcli-latest/dtcli.exe
+      - name: Publish the exe as a release asset
+        if: github.ref == 'refs/heads/arena/9ba516af-day-trader-skill'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view dtcli-latest >/dev/null 2>&1 || gh release create dtcli-latest \
+            --prerelease --target "$GITHUB_SHA" \
+            --title "dtcli.exe, the latest Windows build" \
+            --notes "One executable for all twelve tools: dtcli.exe list, dtcli.exe mt5 doctor, dtcli.exe lots --write. Built by the build-exe workflow from $GITHUB_SHA. MetaTrader5 is bundled, so a running terminal works without installing Python. Without a terminal, add --replay snapshot.json to any read."
+          gh release upload dtcli-latest dist/dtcli.exe --clobber
+          gh release edit dtcli-latest --target "$GITHUB_SHA" >/dev/null 2>&1 || true
 
       - name: Fail the job if the suite failed
         if: always()
