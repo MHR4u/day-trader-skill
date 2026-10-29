@@ -371,7 +371,9 @@ class Terminal:
                 code, msg = _last_error(self.mt5)
                 raise Mt5Error("the terminal did not initialize (%s %s). Open MetaTrader 5, log in to the "
                                "account, turn on Tools > Options > Expert Advisors > Allow algorithmic trading, "
-                               "and check the path in \"mt5.terminal_path\" or MT5_PATH"
+                               "and check the path in \"mt5.terminal_path\" or MT5_PATH. If the MetaTrader5 "
+                               "package is not installed at all: python -m pip install MetaTrader5 (Windows "
+                               "only), or read a saved snapshot with --replay"
                                % (code, msg))
             login = os.environ.get("MT5_LOGIN")
             if login:
