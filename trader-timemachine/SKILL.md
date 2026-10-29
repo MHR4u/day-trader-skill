@@ -39,6 +39,11 @@ python3 "${CLAUDE_SKILL_DIR}/timemachine.py" run --symbol TSLA --date 2026-10-19
 python3 "${CLAUDE_SKILL_DIR}/timemachine.py" chart --from           # ASCII fan chart of the saved run
 ```
 
+For MetaTrader 5, `mt5.py bars --yahoo` writes a chart file this skill can
+replay with `--offline`, and `mt5.py backtest` runs one simple rule over the
+same bars with the spread and commission counted. The replay here models the
+NYSE session, so read the MT5 windows with `mt5.py session` in mind.
+
 Other flags: `--replays N`, `--seed N` (default 19), `--window N` (default 2
 bars), `--offline FILE` (a saved Yahoo chart JSON, `.json` or `.json.gz`),
 `--now "2026-10-19 10:15"` (New York time) to pin the clock.

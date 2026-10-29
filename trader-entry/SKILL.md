@@ -35,6 +35,14 @@ python3 "${CLAUDE_SKILL_DIR}/entry.py" watch TSLA --until 15:30    # one line pe
 python3 "${CLAUDE_SKILL_DIR}/entry.py" watchlist                   # every hit in trader/watchlist.json
 ```
 
+For MetaTrader 5 bars, export them once and point the timer at the file:
+`python3 ../trader-mt5/mt5.py bars EURUSD --tf M5 --count 400 --yahoo
+trader/mt5/EURUSD.json`, then `--offline trader/mt5/EURUSD.json`. MT5 bars
+are broker-session bars, so set the entry window and the flat-by time from
+`mt5.py session` rather than the NYSE clock. The timer still only sees the
+09:30 to 16:00 New York window, so outside those hours plan from `mt5.py
+levels` and `mt5.py setup` instead.
+
 Other flags: `--or-minutes N` (default 15), `--json`, `--offline FILE` (a
 saved Yahoo chart JSON, `.json` or `.json.gz`, or a folder of
 `<TICKER>.json`), `--now "2026-10-19 10:15"` (New York time) to replay a day.

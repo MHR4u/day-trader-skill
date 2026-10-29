@@ -21,6 +21,14 @@ work around the one moment that matters, your yes:
             flat_by. It still goes through trader-risk and your yes.
   log       prints today's decisions.
 
+MT5 orders (venue "mt5", written by trader-budget/lots.py) get the same three
+gates, in MT5 words. show renders the order as lots, a stop-loss, a take-profit
+and the money at risk, plus the exact JSON mt5.py execute will send to
+order_send. approve records your yes for that fingerprint. The final call is
+mt5.py execute, which re-checks the risk verdict and your yes, asks the
+terminal's own order_check, and only then sends. Nothing here talks to a
+terminal, exactly as nothing here talks to Alpaca.
+
     python3 ticket.py show                    # every order, READY or not
     python3 ticket.py show --index 1 --json   # one ticket as JSON
     python3 ticket.py approve --index 1 --reply "yes"
@@ -51,6 +59,9 @@ TIF_WORDS = {"day": "good for today", "gtc": "good until canceled", "opg": "at t
              "cls": "at the close", "ioc": "immediate or cancel", "fok": "fill or kill"}
 YES_WORDS = ("yes", "y")
 BATCH_WORDS = {"all", "every", "everything", "rest", "remaining", "them", "both", "batch", "each"}
+MT5_FIELDS = ("venue", "symbol", "side", "type", "volume", "price", "sl", "tp",
+              "deviation", "magic", "comment", "filling", "time", "expiration")
+MT5_VENUES = ("mt5", "metatrader", "metatrader5", "mt5-demo", "mt5-live")
 DOUBT_WORDS = {"no", "not", "dont", "don't", "wait", "cancel", "stop", "but", "maybe", "later",
                "hold", "unless", "if"}
 
@@ -142,7 +153,82 @@ def rec_day(rec):
 
 # ---------------------------------------------------------------- the order
 
+def is_mt5(order):
+    return str((order or {}).get("venue") or (order or {}).get("platform") or "").strip().lower() in MT5_VENUES
+
+
+def _mt5_num(v):
+    try:
+        v = float(v)
+    except (TypeError, ValueError):
+        return str(v)
+    if abs(v - round(v)) < 1e-9:
+        return str(int(round(v)))
+    return ("%.8f" % v).rstrip("0").rstrip(".")
+
+
+def mt5_fingerprint(order):
+    """The exact MT5 order that was checked: same function as
+    trader-mt5/mt5rules.py and trader-mt5/mt5.py."""
+    core = {}
+    for k in MT5_FIELDS:
+        v = order.get(k)
+        if v is None:
+            continue
+        if k in ("volume", "price", "sl", "tp"):
+            v = _mt5_num(v)
+        elif k in ("deviation", "magic"):
+            try:
+                v = int(float(v))
+            except (TypeError, ValueError):
+                v = str(v)
+        core[k] = v
+    core["venue"] = "mt5"
+    blob = json.dumps(core, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
+
+
+def mt5_request(order, cfg):
+    """The request mt5.py will hand to order_send, built from the order's own
+    stored spec and quote. Same rules as trader-mt5/mt5lib.request."""
+    cfg = cfg or {}
+    block = cfg.get("mt5") if isinstance(cfg.get("mt5"), dict) else {}
+    spec = order.get("spec") if isinstance(order.get("spec"), dict) else {}
+    quote = order.get("quote") if isinstance(order.get("quote"), dict) else {}
+    side = str(order.get("side") or "buy").lower()
+    typ = str(order.get("type") or "market").lower()
+    action = "deal" if typ == "market" else "pending"
+    bid = _f(quote.get("bid"))
+    ask = _f(quote.get("ask"))
+    if action == "deal":
+        px = ask if side == "buy" else bid
+        if px is None:
+            px = _f((order.get("plan") or {}).get("entry"))
+    else:
+        px = _f(order.get("price"))
+    req = {"action": action, "symbol": str(order.get("symbol") or "").upper(),
+           "volume": _f(order.get("volume")), "type": typ,
+           "price": round(px, 8) if px is not None else None,
+           "deviation": int(_f(order.get("deviation")) or 20),
+           "magic": int(_f(order.get("magic")) or _f(block.get("magic")) or 20261019),
+           "comment": str(order.get("comment") or "")[:26],
+           "time": str(order.get("time") or "gtc").lower()}
+    for k in ("sl", "tp"):
+        if _f(order.get(k)) is not None:
+            req[k] = round(_f(order.get(k)), 8)
+    fill = str(order.get("filling") or block.get("filling") or "auto").lower()
+    if fill == "auto":
+        modes = [str(m).lower() for m in (spec.get("filling_modes") or ["fok", "ioc", "return"])]
+        fill = "fok" if "fok" in modes else ("ioc" if "ioc" in modes else "return")
+    req["filling"] = fill
+    if req["time"] in ("specified", "specified_day"):
+        req["expiration"] = order.get("expiration")
+    return req
+
+
 def fingerprint(order):
+    if is_mt5(order):                      # the MT5 ticket is matched by its own fields
+        return mt5_fingerprint(order)
     """Same function as trader-risk/check.py: identifies the exact order."""
     core = {k: order[k] for k in ALPACA_FIELDS if k in order and order[k] is not None}
     blob = json.dumps(core, sort_keys=True, separators=(",", ":"))
@@ -194,6 +280,11 @@ def is_bracket(order):
 
 def max_loss(order):
     """(dollars, stop) lost if the stop fills exactly at the stop, or (None, stop)."""
+    if is_mt5(order):
+        risk = order.get("risk") if isinstance(order.get("risk"), dict) else {}
+        stop = _f(order.get("sl")) or _f((order.get("plan") or {}).get("stop"))
+        loss = _f(risk.get("risk"))
+        return (round(loss, 2) if loss is not None else None), stop
     stop = _f(order.get("stop_loss_stop_price")) or _f((order.get("plan") or {}).get("stop"))
     q = _f(order.get("qty"))
     if not stop or not q:
@@ -213,6 +304,8 @@ def max_loss(order):
 
 def plain_parts(order):
     """The ticket in plain words, one part per line."""
+    if is_mt5(order):
+        return mt5_plain_parts(order)
     side = str(order.get("side", "")).upper()
     sym = order.get("symbol", "?")
     typ = str(order.get("type", "market"))
@@ -248,6 +341,41 @@ def plain_parts(order):
     return ["%s %s, %s, %s" % (side, what, how, tif)]
 
 
+def mt5_plain_parts(order):
+    """An MT5 ticket in plain words: lots, the broker's own order type, the
+    stop and the target, and the money at risk (stop distance plus commission)."""
+    side = str(order.get("side", "")).upper()
+    sym = order.get("symbol", "?")
+    typ = str(order.get("type") or "market").replace("_", " ")
+    spec = order.get("spec") if isinstance(order.get("spec"), dict) else {}
+    try:
+        d = int(spec.get("digits", 5))
+    except (TypeError, ValueError):
+        d = 5
+    policy = {"gtc": "good until canceled", "day": "good for today",
+              "specified": "until its expiry", "specified_day": "until its expiry"}.get(
+                  str(order.get("time") or "gtc"), order.get("time"))
+    parts = ["%s %s lots of %s, %s order, %s" % (side, _str_num(order.get("volume")), sym, typ, policy)]
+    if str(order.get("type")) != "market" and order.get("price") is not None:
+        parts.append("at " + (("%." + str(d) + "f") % _f(order["price"])))
+    if order.get("sl") is not None:
+        parts.append(("stop-loss %." + str(d) + "f") % _f(order["sl"]))
+    if order.get("tp") is not None:
+        parts.append(("take-profit %." + str(d) + "f") % _f(order["tp"]))
+    loss, stop = max_loss(order)
+    risk = order.get("risk") if isinstance(order.get("risk"), dict) else {}
+    if loss is not None:
+        extra = ""
+        if _f(risk.get("pips_risk")):
+            extra = " (%s pips at %s per lot" % (_str_num(risk["pips_risk"]), _money(risk.get("per_lot_risk")))
+            if _f(risk.get("commission")):
+                extra += ", plus %s commission)" % _money(risk.get("commission"))
+            else:
+                extra += ")"
+        parts.append(("max loss about %s if the stop fills at %." + str(d) + "f%s") % (_money(loss), stop, extra))
+    return parts
+
+
 def plain(order):
     """BUY $1,250 of AAPL, market order, good for today
     BUY 8 TSLA, market, good for today / stop-loss 358.32 / take-profit 370.04 / max loss about $46.88 ..."""
@@ -255,6 +383,11 @@ def plain(order):
 
 
 def amount_numbers(order):
+    if is_mt5(order):
+        vals = [_f(order.get(k)) for k in ("volume", "price", "sl", "tp")]
+        loss, _ = max_loss(order)
+        vals.append(loss)
+        return [v for v in vals if v is not None]
     nums = []
     for k in ("notional", "qty", "limit_price", "stop_loss_stop_price", "take_profit_limit_price",
               "stop_loss_limit_price"):
@@ -351,6 +484,8 @@ def kind_of(order, rv):
 
 def render(order, idx, total, cfg, risk, state, today):
     ready, label, rv = status_of(order, risk, state, today)
+    if is_mt5(order):
+        return render_mt5(order, idx, total, cfg, ready, label, rv)
     broker = str(cfg.get("broker", "alpaca")).lower()
     paper = cfg.get("paper", True)
     acct = "PAPER account" if paper else "LIVE ACCOUNT, REAL MONEY"
@@ -379,14 +514,60 @@ def render(order, idx, total, cfg, risk, state, today):
     return "\n".join(lines), ready
 
 
+def render_mt5(order, idx, total, cfg, ready, label, rv):
+    account = "PAPER (demo) account" if cfg.get("paper", True) else "LIVE ACCOUNT, REAL MONEY"
+    lines = ["ORDER %d of %d, %s, MetaTrader 5" % (idx, total, account)]
+    for part in mt5_plain_parts(order):
+        lines.append("  " + part)
+    if order.get("why"):
+        lines.append("  why: " + order["why"])
+    risk_d = order.get("risk") if isinstance(order.get("risk"), dict) else {}
+    if risk_d.get("margin") is not None:
+        lines.append("  margin %s (%s%% of free margin)%s" % (
+            _money(risk_d.get("margin")), _str_num(risk_d.get("margin_pct")),
+            (", margin level %.0f%% after" % risk_d["margin_level_after"])
+            if _f(risk_d.get("margin_level_after")) else ""))
+    if risk_d.get("rr") is not None:
+        lines.append("  reward:risk %s to the take-profit" % _str_num(risk_d.get("rr")))
+    spec = order.get("spec") if isinstance(order.get("spec"), dict) else {}
+    if spec.get("trade_stops_level"):
+        lines.append("  the broker's stops level is %s points: the stop is outside it" %
+                     _str_num(spec["trade_stops_level"]))
+    lines.append("  " + label)
+    for w in (rv or {}).get("warnings", []):
+        lines.append("  note: " + w)
+    lines.append("  Claude will call mt5.py execute --index %d, which sends exactly:" % idx)
+    mt5_req = mt5_request(order, cfg) if is_mt5(order) else {}
+    for l in json.dumps(mt5_req, indent=2).splitlines():
+        lines.append("    " + l)
+    mt5_req = mt5_request(order, cfg) if is_mt5(order) else {}
+    if mt5_req.get("action") == "pending":
+        lines.append("  The broker holds this pending order until the price reaches %s (time in force %s)."
+                     % (_str_num(mt5_req.get("price")), mt5_req.get("time") or "gtc"))
+        lines.append("  When it fills, the stop-loss and the take-profit travel with it.")
+    else:
+        lines.append("  The terminal fills at the market: the price above is the quote the ticket was sized on.")
+        lines.append("  After the fill, the stop-loss and the take-profit live at the broker with the position.")
+    if ready:
+        lines.append("  Reply \"yes\" to place this one order, or \"no\" to skip it.")
+        lines.append("  Then: mt5.py execute --index %d. It re-checks the risk verdict, your yes and the "
+                     "terminal before anything is sent." % idx)
+    return "\n".join(lines), ready
+
+
 def ticket_json(order, idx, cfg, risk, state, today):
     ready, label, rv = status_of(order, risk, state, today)
     loss, stop = max_loss(order)
+    mt5 = is_mt5(order)
     return {"index": idx, "ready": ready, "status": label, "plain": plain(order),
             "fingerprint": fingerprint(order), "paper": bool(cfg.get("paper", True)),
-            "broker": cfg.get("broker", "alpaca"), "tool": "place_stock_order",
-            "tool_input": tool_input(order), "why": order.get("why", ""),
-            "bracket": is_bracket(order), "max_loss": loss, "stop": stop}
+            "broker": "mt5" if mt5 else cfg.get("broker", "alpaca"),
+            "venue": "mt5" if mt5 else "alpaca",
+            "tool": "order_send (mt5.py execute)" if mt5 else "place_stock_order",
+            "tool_input": mt5_request(order, cfg) if mt5 else tool_input(order),
+            "why": order.get("why", ""),
+            "bracket": is_bracket(order), "max_loss": loss, "stop": stop,
+            "volume": order.get("volume") if mt5 else None}
 
 
 # ---------------------------------------------------------------- fills -> portfolio
@@ -508,14 +689,24 @@ def cmd_approve(a):
         print("Not recorded: %s. Ask the user again with the ticket for order %d." % (why, a.index))
         return 1
     loss, stop = max_loss(order)
+    mt5 = is_mt5(order)
     rec = {"at": ny_iso(now), "date": today, "index": a.index, "fingerprint": fingerprint(order),
            "symbol": str(order.get("symbol", "")).upper(), "side": order.get("side"),
-           "qty": order.get("qty"), "kind": kind_of(order, rv), "max_loss": loss, "stop": stop,
+           "qty": order.get("qty"), "volume": order.get("volume") if mt5 else None,
+           "kind": kind_of(order, rv), "max_loss": loss, "stop": stop,
            "plain": plain(order), "status": "approved", "reply": a.reply,
-           "paper": bool(cfg.get("paper", True)), "broker": cfg.get("broker", "alpaca")}
+           "venue": "mt5" if mt5 else (cfg.get("broker", "alpaca")),
+           "paper": bool(cfg.get("paper", True)), "broker": "mt5" if mt5 else cfg.get("broker", "alpaca")}
     state.setdefault("orders", []).append(rec)
     write_json(a.state, state)
     print("Recorded your yes for order %d: %s." % (a.index, plain(order)))
+    if mt5:
+        print("Now run: mt5.py execute --index %d" % a.index)
+        print("It re-checks trader-risk's PASS, this yes and the terminal, and sends exactly:")
+        print(json.dumps(mt5_request(order, cfg), indent=2))
+        print("Then record the outcome: ticket.py result --index %d --status placed|failed --broker-id TICKET"
+              % a.index)
+        return 0
     if str(cfg.get("broker", "alpaca")).lower() == "ibkr":
         print("Now draft it with the Interactive Brokers connector; approve it in your IBKR account.")
     else:
@@ -557,6 +748,13 @@ def cmd_result(a):
     state["orders"].append(new)
     write_json(a.state, state)
     print("Recorded order %d as %s." % (a.index, a.status))
+    if is_mt5(order):
+        print("MT5 order: the terminal owns the position, so trader/portfolio.json is left alone. "
+              "mt5.py positions and mt5.py history are the truth here.")
+        if a.status == "placed":
+            print("Next: mt5.py positions; manage the stop with mt5.py manage trail / breakeven; "
+                  "flat by the session close with mt5.py manage close.")
+        return 0
     if a.status == "placed" and a.filled_qty and a.filled_price:
         apply_fill(a.portfolio, cfg, rec["symbol"], rec["side"], a.filled_qty, a.filled_price, today)
         log_fill(a.state, now, today, rec["symbol"], rec["side"], a.filled_qty, a.filled_price)
@@ -601,6 +799,15 @@ def cmd_flatten(a):
             raise TicketError("nothing to flatten: no %s shares in %s. Check the broker (get_open_position "
                               "%s) and pass --qty if you do hold some" % (sym, a.portfolio, sym))
     plan = read_json(a.plan, "plan", required=False) or {}
+    if str(plan.get("venue", "")).lower() in MT5_VENUES or str(cfg.get("venue", "")).lower() in MT5_VENUES:
+        flat_by = plan.get("flat_by") or cfg.get("flat_by") or "the session close"
+        print("MT5 position: closing it is not a new order, so there is no ticket to risk-check.")
+        print("Ask the user, then run:")
+        print("  mt5.py manage close --symbol %s%s --yes \"<their reply>\"" % (
+            sym, (" --volume %s" % a.qty) if a.qty else ""))
+        print("Flat by %s New York. The terminal's close is immediate, and the guard can do it too."
+              % flat_by)
+        return 0
     flat_by = (plan.get("flat_by") if str(plan.get("symbol", "")).upper() == sym else None) \
         or cfg.get("flat_by") or "15:55"
     order = {"symbol": sym, "side": "sell", "qty": _str_num(qty), "type": "market", "time_in_force": "day",

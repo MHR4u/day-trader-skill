@@ -33,7 +33,19 @@ python3 "${CLAUDE_SKILL_DIR}/check.py"                           # trader/ files
 python3 "${CLAUDE_SKILL_DIR}/check.py" --json
 python3 "${CLAUDE_SKILL_DIR}/check.py" --no-write                # look without recording
 python3 "${CLAUDE_SKILL_DIR}/check.py" --now "2026-10-19 10:15"  # pin the clock (New York time)
+python3 "${CLAUDE_SKILL_DIR}/check.py" --mt5-context trader/mt5/context.json   # MT5 orders
 ```
+
+MT5 orders (venue `mt5`) are not shares, so they are not checked with share
+rules. `check.py` loads `trader-mt5/mt5rules.py` by path and checks them
+against the terminal snapshot: the volume ladder and the lot caps, the stop
+against the broker's stops level and the spread, the quote's freshness,
+margin and margin level, the symbol's session and the broker's rollover, the
+account's trade mode (a REAL account needs `mt5.allow_live`), today's closed
+losses plus today's entries at their stops against the daily loss, and the
+reward:risk. Exits (a close) skip everything except format, symbol and the
+account: getting out is never blocked. When the snapshot is missing, every
+MT5 order is blocked with that reason, never silently skipped.
 
 ## What it reads and writes
 

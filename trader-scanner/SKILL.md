@@ -35,6 +35,12 @@ python3 "${CLAUDE_SKILL_DIR}/scan.py" orb --at 10:15                 # cut the c
 python3 "${CLAUDE_SKILL_DIR}/scan.py" orb --watchlist trader/watchlist.json --json
 ```
 
+MT5 symbols are not in Nasdaq's US universe, but their bars can be exported
+with `python3 ../trader-mt5/mt5.py bars SYMBOL --tf 5m --count 400 --yahoo
+trader/mt5/SYMBOL.json` and read with `--offline`. The scanner's sessions are
+the NYSE's; for a 24-hour instrument use `mt5.py scan`, `mt5.py levels` and `mt5.py setup`
+instead.
+
 Flags: `--min-price 5` and `--min-volume` (daily 1,000,000, orb 0),
 `--or-minutes 15`, `--max-confirm 200` (orb stage 2),
 `--now "2026-10-19 10:15"` (New York time) to pin the clock, `--offline PATH`

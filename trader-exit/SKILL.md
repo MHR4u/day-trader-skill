@@ -34,6 +34,12 @@ python3 "${CLAUDE_SKILL_DIR}/exit.py" plan --symbol TSLA --entry 364.18 --or-hig
 python3 "${CLAUDE_SKILL_DIR}/exit.py" show                          # the current trader/plan.json
 ```
 
+For an MT5 symbol, `python3 ../trader-mt5/mt5.py setup EURUSD --write-plan`
+writes the plan from the terminal's bars (opening range, ATR stop, R target),
+and `trader-budget/lots.py` sizes it in lots. The `--offline` flag also reads
+the Yahoo-shaped export from `mt5.py bars --yahoo` (it needs at least three
+closed bars before the entry, inside the New York session).
+
 Other flags: `--flat-by 15:55`, `--json`, `--now "2026-10-19 10:15"` (New
 York time), `--entry PRICE` with a waiting entry.json to plan ahead, `--setup
 level`, `--offline FILE` (a saved Yahoo chart JSON for an ATR stop).

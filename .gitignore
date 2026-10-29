@@ -1,0 +1,5 @@
+# state the tools write
+trader/
+__pycache__/
+*.pyc
+.DS_Store
