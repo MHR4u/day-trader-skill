@@ -1,0 +1,1063 @@
+//+------------------------------------------------------------------+
+//|                                              DayTraderMT5.mq5    |
+//|        the day-trader pack as one Expert Advisor                 |
+//|                                                                  |
+//|  The Python desk in trader-mt5/ reads the terminal, sizes in     |
+//|  lots, checks your rules and sends one order after your yes.     |
+//|  This EA is the same idea living inside MetaTrader, for people   |
+//|  who want the terminal to trade on its own:                      |
+//|                                                                  |
+//|    a trend-filtered opening-range breakout,                      |
+//|    a stop half an ATR behind the range (never tighter than the   |
+//|      range mid), a target at an R multiple,                      |
+//|    risk-percent sizing from the symbol's own tick value,         |
+//|    the volume ladder, the broker's stops level and the spread    |
+//|      checked before anything is sent,                            |
+//|    one trade a day, a daily loss stop, a session window,         |
+//|    breakeven, a trailing stop, a partial take-profit, and a      |
+//|      flat-by time.                                               |
+//|                                                                  |
+//|  It cannot place a trade on a REAL-money account unless you set  |
+//|  InpAllowLive to true. Run it on a demo first.                   |
+//|                                                                  |
+//|  It only touches trades with its own magic number, so it will    |
+//|  not disturb anything you opened by hand.                        |
+//|                                                                  |
+//|  Education and tooling, not financial advice. Most people who    |
+//|  day trade lose money. A stop is a plan, not a guarantee.        |
+//+------------------------------------------------------------------+
+#property copyright "day-trader-skill, MIT"
+#property link      "https://github.com/MHR4u/day-trader-skill"
+#property version   "1.00"
+#property description "Trend-filtered opening-range breakout with ATR stop, R target, risk-percent sizing,"
+#property description "spread and stops-level gates, one trade a day, a daily loss stop, breakeven, trailing,"
+#property description "partial take-profit and a flat-by time. Demo by default: a REAL account needs InpAllowLive."
+
+#include <Trade\Trade.mqh>
+
+//+------------------------------------------------------------------+
+//| Inputs                                                           |
+//+------------------------------------------------------------------+
+input group "The gates"
+input bool             InpAllowLive        = false;    // Allow a REAL-money account (leave false)
+input bool             InpDryRun           = false;    // Signal only: log the trade, send nothing
+input long             InpMagic            = 20261019; // Magic number: this EA only touches its own trades
+
+input group "Risk and size"
+input double           InpRiskPercent      = 1.0;      // Risk per trade, % of equity (0 = use the fixed amount)
+input double           InpRiskMoney        = 50.0;     // Risk per trade, account money (0 = use the percent)
+input double           InpMaxLots          = 2.0;      // Hard cap on volume per order
+input double           InpMaxMarginPct     = 40.0;     // Never use more than this % of free margin
+input double           InpMaxSpreadPoints  = 25.0;     // Skip the entry when the spread is wider (0 = off)
+input double           InpMinRR            = 1.5;      // Reward:risk the target is built from
+
+input group "The rule"
+input ENUM_TIMEFRAMES  InpTimeframe        = PERIOD_M5; // Chart timeframe for the rule
+input int              InpEmaFast          = 50;        // Fast EMA
+input int              InpEmaSlow          = 200;       // Slow EMA
+input int              InpORMinutes        = 60;        // Opening range length, minutes
+input double           InpAtrMult          = 0.5;       // Stop: this many ATR behind the entry
+input bool             InpAllowShort       = false;     // Also take the downside break
+
+input group "The clock"
+input bool             InpNewYorkTimes     = true;      // Read the times below as New York, not server time
+input string           InpSessionStart     = "03:05";   // No entries before this time
+input string           InpSessionEnd       = "19:00";   // No entries after this time
+input string           InpFlatBy           = "20:55";   // Close everything at this time
+input bool             InpWeekdaysOnly     = true;      // No entries on Saturday and Sunday
+input int              InpMaxTradesPerDay  = 1;         // Entries allowed per day
+input double           InpMaxDailyLoss     = 150.0;     // Stop for the day after this much realised loss (0 = off)
+
+input group "Managing the trade"
+input double           InpBreakevenAtR     = 1.0;       // Move the stop to the entry at this R (0 = off)
+input double           InpTrailAtR         = 1.0;       // Start trailing at this R (0 = off)
+input int              InpTrailPoints      = 150;       // Trail distance, points
+input double           InpPartialAtR       = 0.0;       // Take part of the position at this R (0 = off)
+input double           InpPartialPercent   = 50.0;      // Percent of the volume to close there
+
+input group "Plumbing"
+input int              InpDeviationPoints  = 20;        // Slippage allowed, points
+input int              InpStopBufferPoints = 10;        // Extra room on top of the broker's stops level
+input bool             InpShowPanel        = true;      // Draw the state on the chart
+
+//+------------------------------------------------------------------+
+//| Globals                                                          |
+//+------------------------------------------------------------------+
+CTrade   g_trade;
+
+int      g_emaFast      = INVALID_HANDLE;
+int      g_emaSlow      = INVALID_HANDLE;
+int      g_atr          = INVALID_HANDLE;
+
+double   g_riskPct      = 0.0;
+double   g_riskMoney    = 0.0;
+double   g_minRR        = 1.5;
+long     g_magic        = 0;
+int      g_maxTrades    = 1;
+int      g_orMinutes    = 60;
+double   g_atrMult      = 0.5;
+double   g_spreadMax    = 0.0;
+double   g_maxLots      = 2.0;
+double   g_maxMarginPct = 40.0;
+int      g_trailPoints  = 150;
+double   g_beAtR        = 0.0;
+double   g_trailAtR     = 0.0;
+double   g_partialAtR   = 0.0;
+double   g_partialPct   = 50.0;
+int      g_deviation    = 20;
+int      g_stopBuffer   = 10;
+int      g_sessionStart = 0;      // minutes of the day
+int      g_sessionEnd   = 0;
+int      g_flatBy       = 0;
+bool     g_newYork      = true;
+bool     g_weekdaysOnly = true;
+bool     g_dryRun       = false;
+bool     g_allowLive    = false;
+bool     g_showPanel    = true;
+bool     g_shorts       = false;
+double   g_maxDailyLoss = 150.0;
+
+bool     g_liveBlocked  = false;
+datetime g_lastBarTime  = 0;      // the last bar the rule looked at
+int      g_lastDay      = -1;     // New York day number, for the once-a-day housekeeping
+
+#define GATE_PREFIX "DTMT5_"
+
+//+------------------------------------------------------------------+
+//| Small helpers                                                    |
+//+------------------------------------------------------------------+
+void Say(const string text)
+{
+   Print("[DayTraderMT5] ", text);
+}
+
+bool ParseHHMM(const string text, int &minutesOfDay)
+{
+   string parts[];
+   int n = StringSplit(text, ':', parts);
+   if(n != 2)
+      return false;
+   int h = (int)StringToInteger(parts[0]);
+   int m = (int)StringToInteger(parts[1]);
+   if(h < 0 || h > 23 || m < 0 || m > 59)
+      return false;
+   minutesOfDay = h * 60 + m;
+   return true;
+}
+
+string HHMM(const int minutesOfDay)
+{
+   int h = minutesOfDay / 60;
+   int m = minutesOfDay % 60;
+   return StringFormat("%02d:%02d", h, m);
+}
+
+int MinutesOfDay(const datetime value)
+{
+   MqlDateTime t;
+   TimeToStruct(value, t);
+   return t.hour * 60 + t.min;
+}
+
+int DayIndexOf(const datetime value)
+{
+   MqlDateTime t;
+   TimeToStruct(value, t);
+   return t.year * 10000 + t.mon * 100 + t.day;
+}
+
+int WeekdayOf(const datetime value)
+{
+   MqlDateTime t;
+   TimeToStruct(value, t);
+   return t.day_of_week;      // 0 = Sunday
+}
+
+int WeekdayOfMonth(const int year, const int month, const int weekday, const int nth)
+{
+   MqlDateTime first;
+   first.year = year;
+   first.mon = month;
+   first.day = 1;
+   first.hour = 0;
+   first.min = 0;
+   first.sec = 0;
+   first.day_of_week = 0;
+   first.day_of_year = 0;
+   datetime stamp = StructToTime(first);
+   MqlDateTime got;
+   TimeToStruct(stamp, got);
+   int delta = (weekday - got.day_of_week + 7) % 7;
+   return 1 + delta + 7 * (nth - 1);
+}
+
+string PeriodDescription(const ENUM_TIMEFRAMES tf)
+{
+   string name = EnumToString(tf);
+   StringReplace(name, "PERIOD_", "");
+   return name;
+}
+
+string RiskWords()
+{
+   string text = "";
+   if(g_riskPct > 0.0)
+      text = DoubleToString(g_riskPct, 2) + "% of equity";
+   if(g_riskMoney > 0.0)
+      text += (text == "" ? "" : " and ") + DoubleToString(g_riskMoney, 2) + " " + AccountInfoString(ACCOUNT_CURRENCY);
+   return text;
+}
+
+//+------------------------------------------------------------------+
+//| Time: the server clock is not your clock and not New York's      |
+//+------------------------------------------------------------------+
+datetime ToNewYork(const datetime serverTime)
+{
+   int offset = (int)(TimeCurrent() - TimeGMT());          // the server's offset from GMT, seconds
+   datetime gmt = serverTime - offset;
+   if(!g_newYork)
+      return serverTime;
+   MqlDateTime g;
+   TimeToStruct(gmt, g);
+   int startDay = WeekdayOfMonth(g.year, 3, 0, 2);         // second Sunday of March
+   int endDay   = WeekdayOfMonth(g.year, 11, 0, 1);        // first Sunday of November
+   MqlDateTime a, b;
+   a.year = g.year; a.mon = 3;  a.day = startDay; a.hour = 7; a.min = 0; a.sec = 0; a.day_of_week = 0; a.day_of_year = 0;
+   b.year = g.year; b.mon = 11; b.day = endDay;   b.hour = 6; b.min = 0; b.sec = 0; b.day_of_week = 0; b.day_of_year = 0;
+   bool summer = (gmt >= StructToTime(a) && gmt < StructToTime(b));
+   return gmt + (summer ? -4 : -5) * 3600;
+}
+
+bool InWindow(const int minutesOfDay, const int from, const int to)
+{
+   if(from <= to)
+      return (minutesOfDay >= from && minutesOfDay < to);
+   return (minutesOfDay >= from || minutesOfDay < to);      // a window over midnight
+}
+
+bool PastTime(const int minutesOfDay, const int at)
+{
+   return (minutesOfDay >= at);
+}
+
+//+------------------------------------------------------------------+
+//| Account and terminal gates                                       |
+//+------------------------------------------------------------------+
+bool IsLiveAccount()
+{
+   return (AccountInfoInteger(ACCOUNT_TRADE_MODE) == ACCOUNT_TRADE_MODE_REAL);
+}
+
+string AccountModeWord()
+{
+   long mode = AccountInfoInteger(ACCOUNT_TRADE_MODE);
+   if(mode == ACCOUNT_TRADE_MODE_DEMO)
+      return "DEMO";
+   if(mode == ACCOUNT_TRADE_MODE_CONTEST)
+      return "CONTEST";
+   if(mode == ACCOUNT_TRADE_MODE_REAL)
+      return "REAL";
+   return "UNKNOWN";
+}
+
+bool TerminalReady(string &why)
+{
+   if(!TerminalInfoInteger(TERMINAL_TRADE_ALLOWED))
+   {
+      why = "the AutoTrading button in the toolbar is off";
+      return false;
+   }
+   if(!MQLInfoInteger(MQL_TRADE_ALLOWED))
+   {
+      why = "Tools > Options > Expert Advisors > Allow algorithmic trading is off";
+      return false;
+   }
+   if(!AccountInfoInteger(ACCOUNT_TRADE_ALLOWED))
+   {
+      why = "this account is not allowed to trade (investor password, or the broker closed it)";
+      return false;
+   }
+   if(!AccountInfoInteger(ACCOUNT_TRADE_EXPERT))
+   {
+      why = "the broker disabled expert advisors on this account";
+      return false;
+   }
+   if(g_liveBlocked)
+   {
+      why = "this is a REAL-money account and InpAllowLive is false";
+      return false;
+   }
+   return true;
+}
+
+//+------------------------------------------------------------------+
+//| Indicators and the opening range                                 |
+//+------------------------------------------------------------------+
+bool LoadRates(const int count, MqlRates &rates[])
+{
+   int got = CopyRates(_Symbol, InpTimeframe, 0, count, rates);
+   if(got < 10)
+      return false;
+   ArraySetAsSeries(rates, true);
+   return true;
+}
+
+double IndicatorValue(const int handle)
+{
+   double buffer[];
+   if(CopyBuffer(handle, 0, 1, 1, buffer) != 1)
+      return 0.0;
+   return buffer[0];
+}
+
+bool TrendUp()
+{
+   double fast = IndicatorValue(g_emaFast);
+   double slow = IndicatorValue(g_emaSlow);
+   if(fast <= 0.0 || slow <= 0.0)
+      return false;
+   return (fast > slow);
+}
+
+bool TrendDown()
+{
+   double fast = IndicatorValue(g_emaFast);
+   double slow = IndicatorValue(g_emaSlow);
+   if(fast <= 0.0 || slow <= 0.0)
+      return false;
+   return (fast < slow);
+}
+
+double AtrValue()
+{
+   double buffer[];
+   if(CopyBuffer(g_atr, 0, 1, 1, buffer) != 1)
+      return 0.0;
+   return buffer[0];
+}
+
+// the opening range of today's session: the high and the low of the bars
+// that fall inside the first InpORMinutes of the session, in New York time
+bool OpeningRange(double &rangeHigh, double &rangeLow, double &rangeMid, int &barsUsed)
+{
+   rangeHigh = 0.0;
+   rangeLow  = 0.0;
+   rangeMid  = 0.0;
+   barsUsed  = 0;
+
+   MqlRates rates[];
+   if(!LoadRates(600, rates))
+      return false;
+
+   datetime nyNow = ToNewYork(TimeCurrent());
+   int today = DayIndexOf(nyNow);
+   int to    = g_sessionStart + g_orMinutes;
+
+   for(int i = ArraySize(rates) - 1; i >= 0; i--)
+   {
+      datetime nyBar = ToNewYork(rates[i].time);
+      if(DayIndexOf(nyBar) != today)
+         continue;
+      int mod = MinutesOfDay(nyBar);
+      if(mod < g_sessionStart || mod >= to)
+         continue;
+      if(rangeHigh == 0.0 || rates[i].high > rangeHigh)
+         rangeHigh = rates[i].high;
+      if(rangeLow == 0.0 || rates[i].low < rangeLow)
+         rangeLow = rates[i].low;
+      barsUsed++;
+   }
+
+   if(barsUsed < 2 || rangeHigh <= 0.0 || rangeLow <= 0.0)
+      return false;
+   rangeMid = (rangeHigh + rangeLow) / 2.0;
+   return true;
+}
+
+//+------------------------------------------------------------------+
+//| The day's counters, from the account's own history               |
+//+------------------------------------------------------------------+
+int CountEntriesToday()
+{
+   datetime nyNow = ToNewYork(TimeCurrent());
+   datetime from = nyNow - 3 * 86400;
+   if(!HistorySelect(from, TimeCurrent() + 60))
+      return 0;
+
+   int count = 0;
+   int today = DayIndexOf(nyNow);
+   int total = HistoryDealsTotal();
+   for(int i = 0; i < total; i++)
+   {
+      ulong ticket = HistoryDealGetTicket(i);
+      if(ticket == 0)
+         continue;
+      if(HistoryDealGetInteger(ticket, DEAL_MAGIC) != g_magic)
+         continue;
+      if(HistoryDealGetString(ticket, DEAL_SYMBOL) != _Symbol)
+         continue;
+      if((ENUM_DEAL_ENTRY)HistoryDealGetInteger(ticket, DEAL_ENTRY) != DEAL_ENTRY_IN)
+         continue;
+      datetime nyDeal = ToNewYork((datetime)HistoryDealGetInteger(ticket, DEAL_TIME));
+      if(DayIndexOf(nyDeal) == today)
+         count++;
+   }
+   return count;
+}
+
+double RealisedToday()
+{
+   datetime nyNow = ToNewYork(TimeCurrent());
+   datetime from = nyNow - 3 * 86400;
+   if(!HistorySelect(from, TimeCurrent() + 60))
+      return 0.0;
+
+   double profit = 0.0;
+   int today = DayIndexOf(nyNow);
+   int total = HistoryDealsTotal();
+   for(int i = 0; i < total; i++)
+   {
+      ulong ticket = HistoryDealGetTicket(i);
+      if(ticket == 0)
+         continue;
+      if(HistoryDealGetInteger(ticket, DEAL_MAGIC) != g_magic)
+         continue;
+      if(HistoryDealGetString(ticket, DEAL_SYMBOL) != _Symbol)
+         continue;
+      datetime nyDeal = ToNewYork((datetime)HistoryDealGetInteger(ticket, DEAL_TIME));
+      if(DayIndexOf(nyDeal) != today)
+         continue;
+      profit += HistoryDealGetDouble(ticket, DEAL_PROFIT);
+      profit += HistoryDealGetDouble(ticket, DEAL_SWAP);
+      profit += HistoryDealGetDouble(ticket, DEAL_COMMISSION);
+      profit += HistoryDealGetDouble(ticket, DEAL_FEE);
+   }
+   return profit;
+}
+
+//+------------------------------------------------------------------+
+//| Sizing: the symbol's own tick value, then the volume ladder      |
+//+------------------------------------------------------------------+
+double MoneyPerLotPerPrice()
+{
+   double tickSize  = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
+   double tickValue = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
+   if(tickSize <= 0.0 || tickValue <= 0.0)
+      return 0.0;
+   return tickValue / tickSize;            // account money for one lot, one full price unit
+}
+
+double RiskBudget()
+{
+   double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+   double byPercent = (g_riskPct > 0.0 ? equity * g_riskPct / 100.0 : 0.0);
+   double byMoney = g_riskMoney;
+   if(byPercent > 0.0 && byMoney > 0.0)
+      return MathMin(byPercent, byMoney);
+   return (byPercent > 0.0 ? byPercent : byMoney);
+}
+
+double FloorToStep(const double volume)
+{
+   double step = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+   if(step <= 0.0)
+      step = 0.01;
+   double lots = MathFloor(volume / step + 0.0000001) * step;
+   return NormalizeDouble(lots, 2);
+}
+
+// the broker's own ladder: a close has to pass this, and only an entry also
+// has to pass InpMaxLots
+bool LadderFits(const double volume, string &why)
+{
+   double vmin = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+   double vmax = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
+   if(volume + 0.0000001 < vmin)
+   {
+      why = "under the broker's smallest lot (" + DoubleToString(vmin, 2) + ")";
+      return false;
+   }
+   if(volume > vmax + 0.0000001)
+   {
+      why = "over the broker's largest lot (" + DoubleToString(vmax, 2) + ")";
+      return false;
+   }
+   return true;
+}
+
+bool VolumeFits(const double volume, string &why)
+{
+   if(!LadderFits(volume, why))
+      return false;
+   if(volume > g_maxLots + 0.0000001)
+   {
+      why = "over InpMaxLots (" + DoubleToString(g_maxLots, 2) + ")";
+      return false;
+   }
+   return true;
+}
+
+// how much margin this volume needs, and whether it fits our share of the free margin
+bool MarginFits(const ENUM_ORDER_TYPE type, const double volume, const double price, string &why)
+{
+   double margin = 0.0;
+   if(!OrderCalcMargin(type, _Symbol, volume, price, margin))
+   {
+      why = "the terminal could not price the margin";
+      return false;
+   }
+   double free = AccountInfoDouble(ACCOUNT_MARGIN_FREE);
+   double allowed = free * g_maxMarginPct / 100.0;
+   if(margin > allowed)
+   {
+      why = "it needs " + DoubleToString(margin, 2) + " of margin, over " +
+            DoubleToString(g_maxMarginPct, 0) + "% of free margin";
+      return false;
+   }
+   return true;
+}
+
+// the volume whose risk at this stop is the risk budget, shrunk until it fits
+double SizeLots(const double stopDistance, string &note)
+{
+   note = "";
+   double budget = RiskBudget();
+   double perLot = MoneyPerLotPerPrice() * stopDistance;
+   if(budget <= 0.0 || perLot <= 0.0)
+   {
+      note = "no risk budget or no tick value";
+      return 0.0;
+   }
+   double raw = budget / perLot;
+   double lots = FloorToStep(raw);
+   if(lots <= 0.0)
+   {
+      note = "the smallest lot risks more than the budget";
+      return 0.0;
+   }
+   note = "risk budget " + DoubleToString(budget, 2) + ", " + DoubleToString(perLot, 2) + " per lot";
+   return lots;
+}
+
+//+------------------------------------------------------------------+
+//| The stops the broker will accept                                 |
+//+------------------------------------------------------------------+
+double MinStopPoints()
+{
+   double stopsLevel = (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL);
+   double freeze = (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_FREEZE_LEVEL);
+   double fromSpread = (double)SymbolInfoInteger(_Symbol, SYMBOL_SPREAD);
+   return MathMax(stopsLevel, MathMax(freeze, fromSpread)) + (double)g_stopBuffer;
+}
+
+double SpreadPoints()
+{
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol, tick))
+      return 0.0;
+   if(_Point <= 0.0)
+      return 0.0;
+   return (tick.ask - tick.bid) / _Point;
+}
+
+//+------------------------------------------------------------------+
+//| Positions of ours                                                |
+//+------------------------------------------------------------------+
+int OurPositions()
+{
+   int count = 0;
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0)
+         continue;
+      if(PositionGetInteger(POSITION_MAGIC) != g_magic)
+         continue;
+      if(PositionGetString(POSITION_SYMBOL) != _Symbol)
+         continue;
+      count++;
+   }
+   return count;
+}
+
+string MarkName(const ulong ticket, const string what)
+{
+   return GATE_PREFIX + IntegerToString(g_magic) + "_" + IntegerToString((long)ticket) + "_" + what;
+}
+
+bool Marked(const ulong ticket, const string what)
+{
+   return GlobalVariableCheck(MarkName(ticket, what));
+}
+
+void Mark(const ulong ticket, const string what)
+{
+   GlobalVariableSet(MarkName(ticket, what), (double)TimeCurrent());
+}
+
+// forget the marks of positions that are gone, once a day
+void PruneMarks()
+{
+   string prefix = GATE_PREFIX + IntegerToString(g_magic) + "_";
+   int total = GlobalVariablesTotal();
+   for(int i = total - 1; i >= 0; i--)
+   {
+      string name = GlobalVariableName(i);
+      if(StringFind(name, prefix) != 0)
+         continue;
+      string rest = StringSubstr(name, StringLen(prefix));
+      string bits[];
+      if(StringSplit(rest, '_', bits) < 2)
+         continue;
+      ulong ticket = (ulong)StringToInteger(bits[0]);
+      if(!PositionSelectByTicket(ticket))
+         GlobalVariableDel(name);
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Entry                                                            |
+//+------------------------------------------------------------------+
+void TryEntry(const bool tradingReady, const string notReadyWhy)
+{
+   datetime nyNow = ToNewYork(TimeCurrent());
+   int nowMinutes = MinutesOfDay(nyNow);
+
+   if(g_weekdaysOnly && (WeekdayOf(nyNow) == 0 || WeekdayOf(nyNow) == 6))
+      return;                                             // the weekend, in New York
+   if(!InWindow(nowMinutes, g_sessionStart, g_sessionEnd))
+      return;
+   if(OurPositions() > 0)
+      return;
+   if(CountEntriesToday() >= g_maxTrades)
+      return;
+   if(g_maxDailyLoss > 0.0 && RealisedToday() <= -g_maxDailyLoss)
+      return;
+   if(g_spreadMax > 0.0 && SpreadPoints() > g_spreadMax)
+      return;
+
+   double rangeHigh = 0.0, rangeLow = 0.0, rangeMid = 0.0;
+   int orBars = 0;
+   if(!OpeningRange(rangeHigh, rangeLow, rangeMid, orBars))
+      return;                                             // no range yet today
+   if(nowMinutes < g_sessionStart + g_orMinutes)
+      return;                                             // the range is still forming
+
+   MqlRates rates[];
+   if(!LoadRates(10, rates))
+      return;
+   double lastClose = rates[1].close;                     // the last CLOSED bar
+   double atr = AtrValue();
+   if(atr <= 0.0)
+      return;
+
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol, tick))
+      return;
+
+   bool buy  = (lastClose > rangeHigh && TrendUp());
+   bool sell = (g_shorts && lastClose < rangeLow && TrendDown());
+   if(!buy && !sell)
+      return;
+   if(!tradingReady)
+   {
+      Say("a signal, but nothing can be sent: " + notReadyWhy);
+      return;
+   }
+
+   double minPoints = MinStopPoints();
+   double minDistance = minPoints * _Point;
+
+   double entry, stop, target;
+   ENUM_ORDER_TYPE type;
+   if(buy)
+   {
+      entry = NormalizeDouble(tick.ask, _Digits);
+      // half an ATR behind the entry, never tighter than the range's midpoint
+      stop = MathMin(entry - g_atrMult * atr, rangeMid);
+      stop = NormalizeDouble(stop, _Digits);
+      if(entry - stop < minDistance)
+         stop = NormalizeDouble(entry - minDistance, _Digits);
+      target = NormalizeDouble(entry + g_minRR * (entry - stop), _Digits);
+      type = ORDER_TYPE_BUY;
+   }
+   else
+   {
+      entry = NormalizeDouble(tick.bid, _Digits);
+      stop = MathMax(entry + g_atrMult * atr, rangeMid);
+      stop = NormalizeDouble(stop, _Digits);
+      if(stop - entry < minDistance)
+         stop = NormalizeDouble(entry + minDistance, _Digits);
+      target = NormalizeDouble(entry - g_minRR * (stop - entry), _Digits);
+      type = ORDER_TYPE_SELL;
+   }
+
+   double distance = MathAbs(entry - stop);
+   if(distance < minDistance)
+   {
+      Say("the stop is inside the broker's stops level (" + DoubleToString(distance / _Point, 0) +
+          " points against " + DoubleToString(minPoints, 0) + "): no order");
+      return;
+   }
+   double rr = MathAbs(target - entry) / distance;
+   if(rr + 0.0001 < g_minRR)
+   {
+      Say("the rounded target is under the reward:risk you asked for: no order");
+      return;
+   }
+
+   string note = "";
+   double lots = SizeLots(distance, note);
+   string why = "";
+   if(lots <= 0.0 || !VolumeFits(lots, why))
+   {
+      Say("no order: " + (note == "" ? why : note) + (why == "" ? "" : " (" + why + ")"));
+      return;
+   }
+   if(!MarginFits(type, lots, entry, why))
+   {
+      Say("no order: " + why);
+      return;
+   }
+
+   string side = (buy ? "BUY" : "SELL");
+   string summary = StringFormat("%s %s %s lots at %s, stop %s, target %s (%.2fR, %s)",
+                                 side, _Symbol, DoubleToString(lots, 2), DoubleToString(entry, _Digits),
+                                 DoubleToString(stop, _Digits), DoubleToString(target, _Digits), rr, note);
+
+   if(g_dryRun)
+   {
+      Say("DRY RUN would have sent: " + summary);
+      return;
+   }
+
+   bool sent = false;
+   if(buy)
+      sent = g_trade.Buy(lots, _Symbol, 0.0, stop, target, "dtcli orb " + TimeToString(nyNow, TIME_DATE));
+   else
+      sent = g_trade.Sell(lots, _Symbol, 0.0, stop, target, "dtcli orb " + TimeToString(nyNow, TIME_DATE));
+
+   if(sent && g_trade.ResultRetcode() == TRADE_RETCODE_DONE)
+   {
+      Say("SENT " + summary + " | ticket " + IntegerToString((long)g_trade.ResultOrder()));
+      if(g_trade.ResultDeal() > 0)
+         Say("deal " + IntegerToString((long)g_trade.ResultDeal()) + " at " + DoubleToString(g_trade.ResultPrice(), _Digits));
+   }
+   else
+      Say(StringFormat("not sent: %d %s", g_trade.ResultRetcode(), g_trade.ResultRetcodeDescription()));
+}
+
+//+------------------------------------------------------------------+
+//| Managing what is open: breakeven, trailing, a partial            |
+//+------------------------------------------------------------------+
+void ManagePositions()
+{
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0)
+         continue;
+      if(PositionGetInteger(POSITION_MAGIC) != g_magic)
+         continue;
+      if(PositionGetString(POSITION_SYMBOL) != _Symbol)
+         continue;
+
+      long type = PositionGetInteger(POSITION_TYPE);
+      double open = PositionGetDouble(POSITION_PRICE_OPEN);
+      double sl = PositionGetDouble(POSITION_SL);
+      double tp = PositionGetDouble(POSITION_TP);
+      double volume = PositionGetDouble(POSITION_VOLUME);
+      double current = (type == POSITION_TYPE_BUY ? SymbolInfoDouble(_Symbol, SYMBOL_BID)
+                                                  : SymbolInfoDouble(_Symbol, SYMBOL_ASK));
+      if(current <= 0.0)
+         continue;
+
+      // R comes from the target we set: |TP - entry| / the RR it was built from.
+      // It does not change when the stop moves, which is what makes breakeven
+      // and trailing stable across restarts.
+      double targetDistance = MathAbs(tp - open);
+      if(targetDistance <= 0.0 || g_minRR <= 0.0)
+         continue;
+      double rDistance = targetDistance / g_minRR;
+      if(rDistance <= 0.0)
+         continue;
+      double progress = (type == POSITION_TYPE_BUY ? (current - open) : (open - current)) / rDistance;
+
+      double minDistance = MinStopPoints() * _Point;
+
+      // 1) take part of it
+      if(g_partialAtR > 0.0 && progress >= g_partialAtR && !Marked(ticket, "partial"))
+      {
+         double closeVolume = FloorToStep(volume * g_partialPct / 100.0);
+         double left = NormalizeDouble(volume - closeVolume, 2);
+         string why = "";
+         if(closeVolume > 0.0 && LadderFits(closeVolume, why) && LadderFits(left, why))
+         {
+            if(g_dryRun)
+               Say(StringFormat("DRY RUN would take %s lots of #%d at %.2fR", DoubleToString(closeVolume, 2),
+                                (int)ticket, progress));
+            else if(g_trade.PositionClosePartial(ticket, closeVolume))
+            {
+               Mark(ticket, "partial");
+               Say(StringFormat("took %s lots of #%d at %.2fR, %s lots left", DoubleToString(closeVolume, 2),
+                                (int)ticket, progress, DoubleToString(left, 2)));
+            }
+            else
+               Say(StringFormat("partial on #%d refused: %d %s", (int)ticket, g_trade.ResultRetcode(),
+                                g_trade.ResultRetcodeDescription()));
+         }
+      }
+
+      // 2) breakeven
+      if(g_beAtR > 0.0 && progress >= g_beAtR && !Marked(ticket, "breakeven"))
+      {
+         double be = NormalizeDouble(open, _Digits);
+         bool better = (type == POSITION_TYPE_BUY ? (sl < be) : (sl > be || sl == 0.0));
+         bool farEnough = (type == POSITION_TYPE_BUY ? (current - be >= minDistance) : (be - current >= minDistance));
+         if(better && farEnough)
+         {
+            if(g_dryRun)
+               Say(StringFormat("DRY RUN would move #%d's stop to the entry %s", (int)ticket, DoubleToString(be, _Digits)));
+            else if(g_trade.PositionModify(ticket, be, tp))
+            {
+               Mark(ticket, "breakeven");
+               Say(StringFormat("#%d: stop to the entry %s at %.2fR", (int)ticket, DoubleToString(be, _Digits), progress));
+            }
+         }
+      }
+
+      // 3) trail it, after the R you asked for
+      if(g_trailAtR > 0.0 && progress >= g_trailAtR)
+      {
+         double trailDistance = g_trailPoints * _Point;
+         double wanted = (type == POSITION_TYPE_BUY ? current - trailDistance : current + trailDistance);
+         wanted = NormalizeDouble(wanted, _Digits);
+         // a fifth of the trail, and never less than the broker allows: a stop
+         // that only creeps by a point is a request for a rejection
+         double step = MathMax(minDistance, trailDistance * 0.2);
+         bool better = (type == POSITION_TYPE_BUY
+                        ? (wanted > sl + step && wanted < current - minDistance)
+                        : ((wanted < sl - step || sl == 0.0) && wanted > current + minDistance));
+         if(better)
+         {
+            if(g_dryRun)
+               Say(StringFormat("DRY RUN would trail #%d's stop to %s", (int)ticket, DoubleToString(wanted, _Digits)));
+            else if(g_trade.PositionModify(ticket, wanted, tp))
+               Say(StringFormat("#%d: stop trailed to %s at %.2fR", (int)ticket, DoubleToString(wanted, _Digits), progress));
+         }
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Flat by: nothing of ours survives the time you set                |
+//+------------------------------------------------------------------+
+void CloseAllOurs(const int reasonMinutes)
+{
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0)
+         continue;
+      if(PositionGetInteger(POSITION_MAGIC) != g_magic)
+         continue;
+      if(PositionGetString(POSITION_SYMBOL) != _Symbol)
+         continue;
+      double volume = PositionGetDouble(POSITION_VOLUME);
+      if(g_dryRun)
+      {
+         Say(StringFormat("DRY RUN would close #%d (%s lots) at %s", (int)ticket, DoubleToString(volume, 2),
+                          HHMM(reasonMinutes)));
+         continue;
+      }
+      if(g_trade.PositionClose(ticket))
+         Say(StringFormat("closed #%d (%s lots): flat by %s", (int)ticket, DoubleToString(volume, 2),
+                          HHMM(reasonMinutes)));
+      else
+         Say(StringFormat("could not close #%d: %d %s", (int)ticket, g_trade.ResultRetcode(),
+                          g_trade.ResultRetcodeDescription()));
+   }
+}
+
+//+------------------------------------------------------------------+
+//| The chart panel                                                  |
+//+------------------------------------------------------------------+
+void UpdatePanel()
+{
+   if(!g_showPanel)
+      return;
+
+   datetime nyNow = ToNewYork(TimeCurrent());
+   int minutes = MinutesOfDay(nyNow);
+   double rangeHigh = 0.0, rangeLow = 0.0, rangeMid = 0.0;
+   int orBars = 0;
+   bool haveRange = OpeningRange(rangeHigh, rangeLow, rangeMid, orBars);
+   double atr = AtrValue();
+   double spread = SpreadPoints();
+   double realised = RealisedToday();
+   int entries = CountEntriesToday();
+   int open = OurPositions();
+   string readyWhy = "";
+   bool ready = TerminalReady(readyWhy);
+
+   string text = "";
+   text += "DayTraderMT5  " + _Symbol + "  " + PeriodDescription(InpTimeframe) + "\n";
+   text += "account " + AccountModeWord() + (g_liveBlocked ? "  (LIVE BLOCKED: InpAllowLive is false)" : "") +
+           (g_dryRun ? "  DRY RUN" : "") + "\n";
+   text += "New York " + TimeToString(nyNow, TIME_DATE | TIME_MINUTES) +
+           (g_newYork ? "  (session " + HHMM(g_sessionStart) + " to " + HHMM(g_sessionEnd) +
+                        ", flat by " + HHMM(g_flatBy) + ")" : "  (times read as server time)") + "\n";
+   text += "session " + (InWindow(minutes, g_sessionStart, g_sessionEnd) ? "OPEN" : "closed") +
+           ", " + (PastTime(minutes, g_flatBy) ? "PAST FLAT-BY" : "flat-by in " +
+           IntegerToString((g_flatBy - minutes + 1440) % 1440) + " min") + "\n";
+   if(haveRange)
+      text += StringFormat("opening range %s to %s (mid %s, %d bars)\n",
+                           DoubleToString(rangeLow, _Digits), DoubleToString(rangeHigh, _Digits),
+                           DoubleToString(rangeMid, _Digits), orBars);
+   else
+      text += "opening range: not formed yet\n";
+   text += "ATR(14) " + DoubleToString(atr, _Digits) + "   spread " + DoubleToString(spread, 0) + " points" +
+           (g_spreadMax > 0.0 ? (" / max " + DoubleToString(g_spreadMax, 0)) : "") + "\n";
+   text += StringFormat("today: %d of %d entries, realised %s %s, %d open\n", entries, g_maxTrades,
+                        DoubleToString(realised, 2), AccountInfoString(ACCOUNT_CURRENCY), open);
+   text += StringFormat("risk %s per trade, stop %.1f ATR behind the entry, target %.2fR\n", RiskWords(),
+                        g_atrMult, g_minRR);
+   text += "trading: " + (ready ? "yes" : ("no, " + readyWhy)) + "\n";
+   Comment(text);
+}
+
+//+------------------------------------------------------------------+
+//| OnInit                                                           |
+//+------------------------------------------------------------------+
+int OnInit()
+{
+   g_magic        = InpMagic;
+   g_riskPct      = MathMax(0.0, InpRiskPercent);
+   g_riskMoney    = MathMax(0.0, InpRiskMoney);
+   g_minRR        = MathMax(0.1, InpMinRR);
+   g_maxTrades    = MathMax(1, InpMaxTradesPerDay);
+   g_orMinutes    = MathMax(5, InpORMinutes);
+   g_atrMult      = MathMax(0.1, InpAtrMult);
+   g_spreadMax    = MathMax(0.0, InpMaxSpreadPoints);
+   g_maxLots      = MathMax(0.01, InpMaxLots);
+   g_maxMarginPct = MathMin(100.0, MathMax(1.0, InpMaxMarginPct));
+   g_trailPoints  = MathMax(10, InpTrailPoints);
+   g_beAtR        = MathMax(0.0, InpBreakevenAtR);
+   g_trailAtR     = MathMax(0.0, InpTrailAtR);
+   g_partialAtR   = MathMax(0.0, InpPartialAtR);
+   g_partialPct   = MathMin(90.0, MathMax(10.0, InpPartialPercent));
+   g_deviation    = MathMax(1, InpDeviationPoints);
+   g_stopBuffer   = MathMax(0, InpStopBufferPoints);
+   g_newYork      = InpNewYorkTimes;
+   g_weekdaysOnly = InpWeekdaysOnly;
+   g_dryRun       = InpDryRun;
+   g_allowLive    = InpAllowLive;
+   g_showPanel    = InpShowPanel;
+   g_shorts       = InpAllowShort;
+   g_maxDailyLoss = MathMax(0.0, InpMaxDailyLoss);
+
+   if(g_riskPct <= 0.0 && g_riskMoney <= 0.0)
+   {
+      Say("InpRiskPercent and InpRiskMoney are both zero: give it a risk budget. Nothing will trade.");
+      return INIT_PARAMETERS_INCORRECT;
+   }
+
+   if(!ParseHHMM(InpSessionStart, g_sessionStart) ||
+      !ParseHHMM(InpSessionEnd,   g_sessionEnd)   ||
+      !ParseHHMM(InpFlatBy,       g_flatBy))
+   {
+      Say("a time input is not HH:MM (session start, session end, flat by)");
+      return INIT_PARAMETERS_INCORRECT;
+   }
+
+   if(!SymbolSelect(_Symbol, true))
+   {
+      Say("the terminal does not list " + _Symbol + " in Market Watch");
+      return INIT_FAILED;
+   }
+
+   g_emaFast = iMA(_Symbol, InpTimeframe, MathMax(2, InpEmaFast), 0, MODE_EMA, PRICE_CLOSE);
+   g_emaSlow = iMA(_Symbol, InpTimeframe, MathMax(5, InpEmaSlow), 0, MODE_EMA, PRICE_CLOSE);
+   g_atr     = iATR(_Symbol, InpTimeframe, 14);
+   if(g_emaFast == INVALID_HANDLE || g_emaSlow == INVALID_HANDLE || g_atr == INVALID_HANDLE)
+   {
+      Say("could not create the indicator handles: " + IntegerToString(GetLastError()));
+      return INIT_FAILED;
+   }
+
+   g_trade.SetExpertMagicNumber((ulong)g_magic);
+   g_trade.SetDeviationInPoints((ulong)g_deviation);
+   g_trade.SetTypeFillingBySymbol(_Symbol);
+   g_trade.LogLevel(LOG_LEVEL_ERRORS);
+
+   g_liveBlocked = (IsLiveAccount() && !g_allowLive);
+
+   Say("starting on " + _Symbol + " " + PeriodDescription(InpTimeframe) + ": " + AccountModeWord() +
+       " account, " + (g_dryRun ? "DRY RUN (nothing will be sent)" : "trading"));
+   Say(StringFormat("session %s to %s (%s time), flat by %s, %d trade(s) a day, risk %s",
+                    HHMM(g_sessionStart), HHMM(g_sessionEnd),
+                    (g_newYork ? "New York" : "server"), HHMM(g_flatBy),
+                    g_maxTrades, RiskWords()));
+   if(g_liveBlocked)
+      Say("REAL account and InpAllowLive is false: this EA will read and log, and will not trade. "
+          "Switch to a demo account, or set InpAllowLive to true on purpose.");
+
+   EventSetTimer(5);
+   UpdatePanel();
+   return INIT_SUCCEEDED;
+}
+
+void OnDeinit(const int reason)
+{
+   EventKillTimer();
+   if(g_emaFast != INVALID_HANDLE)
+      IndicatorRelease(g_emaFast);
+   if(g_emaSlow != INVALID_HANDLE)
+      IndicatorRelease(g_emaSlow);
+   if(g_atr != INVALID_HANDLE)
+      IndicatorRelease(g_atr);
+   Comment("");
+}
+
+void OnTimer()
+{
+   UpdatePanel();
+}
+
+//+------------------------------------------------------------------+
+//| OnTick                                                           |
+//+------------------------------------------------------------------+
+void OnTick()
+{
+   datetime nyNow = ToNewYork(TimeCurrent());
+   int minutes = MinutesOfDay(nyNow);
+
+   // once a day: forget the marks of positions that are gone
+   int day = DayIndexOf(nyNow);
+   if(day != g_lastDay)
+   {
+      g_lastDay = day;
+      PruneMarks();
+      Say("a new day in New York: " + TimeToString(nyNow, TIME_DATE));
+   }
+
+   string readyWhy = "";
+   bool ready = TerminalReady(readyWhy);
+
+   // flat by the time you set, whatever else is true
+   if(PastTime(minutes, g_flatBy) && OurPositions() > 0)
+      CloseAllOurs(minutes);
+
+   // manage what is open, even when no new entry is allowed
+   ManagePositions();
+
+   // the rule looks at closed bars only
+   datetime barTime = (datetime)SeriesInfoInteger(_Symbol, InpTimeframe, SERIES_LASTBAR_DATE);
+   if(barTime != 0 && barTime != g_lastBarTime)
+   {
+      g_lastBarTime = barTime;
+      TryEntry(ready, readyWhy);
+      UpdatePanel();
+   }
+}
+//+------------------------------------------------------------------+

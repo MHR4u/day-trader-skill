@@ -193,6 +193,16 @@ The exe is built by the `build-exe` workflow and published here:
 or build it yourself on Windows with `trader-mt5\build-exe.bat`. The three
 ways, and what is inside the binary, are in `trader-mt5/BUILD-EXE.md`.
 
+### Or no Python at all: the Expert Advisor
+
+`trader-mt5/ea/DayTraderMT5.mq5` is the same rule as one MetaTrader 5 Expert
+Advisor. Copy it to `MQL5\Experts`, compile it with F7, attach it to an M5
+chart, and the terminal trades it by itself: the opening-range breakout, the
+ATR stop, the R target, risk-percent sizing, the spread and stops-level gates,
+one trade a day, a daily loss stop, breakeven, trailing, a partial, and a
+flat-by time. Demo by default; a REAL account needs `InpAllowLive`. The install
+walkthrough is in `trader-mt5/ea/README.md`.
+
 ## The tools
 
 All standard-library Python except the MT5 bridge, which uses the broker's own

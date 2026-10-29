@@ -1,0 +1,151 @@
+# DayTraderMT5.mq5 - the pack as one Expert Advisor
+
+One file. Drop it in MetaTrader 5, compile it, attach it to a chart, and the
+terminal trades the rule by itself. No Python, no bridge, no terminal window
+left open, nothing to type.
+
+It is the same rule the Python desk in `trader-mt5/` checks for you: a
+trend-filtered opening-range breakout with an ATR stop, a target at an R
+multiple, risk-percent sizing from the symbol's own tick value, and the
+broker's stops level and the spread checked before anything is sent.
+
+```
+trader-mt5/ea/DayTraderMT5.mq5     the EA (this folder)
+trader-mt5/ea/README.md            you are here
+```
+
+## What it does, in order
+
+1. Waits for the first `InpORMinutes` minutes of the New York session and
+   measures the high and the low of that window: the opening range.
+2. On every closed bar after that, if the close is above the range high and
+   the fast EMA is above the slow EMA, it buys. With `InpAllowShort` on, a
+   close under the range low with the fast EMA below the slow one sells.
+3. Stop: half an ATR behind the entry, but never tighter than the range mid,
+   and never inside the broker's stops level plus the spread plus
+   `InpStopBufferPoints`.
+4. Target: `InpMinRR` times the risk.
+5. Size: the risk budget (`InpRiskPercent` of equity, or `InpRiskMoney`,
+   whichever is smaller) divided by what one lot loses at that stop, floored
+   to the volume step, capped by `InpMaxLots` and by `InpMaxMarginPct` of free
+   margin.
+6. Then it manages the trade: breakeven at `InpBreakevenAtR`, a trailing stop
+   after `InpTrailAtR`, an optional partial close at `InpPartialAtR`, and
+   everything is closed at `InpFlatBy`.
+7. Gates that stop it: one entry a day (default), a daily realised-loss stop,
+   a session window, weekdays only, a spread ceiling, and never a second
+   position while it already has one open.
+
+All times are read as **New York** time (`InpNewYorkTimes = true`), with the
+US daylight-saving switch handled for you. The default session is 03:05 to
+19:00 with flat-by 20:55, which is the pre-market open to the closing bell and
+a little past it.
+
+## Install, in five steps
+
+**1. Copy the file.** In MetaTrader 5: `File > Open Data Folder`, then
+`MQL5 > Experts`, and copy `DayTraderMT5.mq5` in there. Or, without the
+terminal: paste it into
+`C:\Users\<you>\AppData\Roaming\MetaQuotes\Terminal\<long id>\MQL5\Experts\`.
+
+**2. Compile it.** Open MetaEditor (F4 in the terminal), find the file in the
+Navigator under `Experts`, and press **F7** (or `Compile`). The Toolbox at the
+bottom should say `0 errors, 0 warnings`. If it says anything else, the error
+names the line: fix that line before going on.
+
+**3. Turn trading on.** In the terminal toolbar the **AutoTrading** button must
+be green, and `Tools > Options > Expert Advisors` needs
+`Allow algorithmic trading` ticked. The EA checks both and tells you in the
+panel which one is missing.
+
+**4. Attach it.** Open an **M5 chart** of the symbol you want (EURUSD, XAUUSD,
+US30, whatever your broker lists), drag `DayTraderMT5` from the Navigator onto
+the chart, and tick `Allow algorithmic trading` in the dialog. Inputs are in
+the `Inputs` tab if you want to change anything.
+
+**5. Watch it on a demo first.** The account type and the reason it is not
+trading yet are printed on the chart and in the `Experts` tab of the Toolbox.
+
+Start with a **demo** account. On a REAL-money account the EA refuses to trade
+until you set `InpAllowLive = true`, on purpose, and it says so in the log.
+
+## The inputs that matter
+
+| Input | Default | What it is |
+| --- | --- | --- |
+| `InpAllowLive` | `false` | A REAL account needs this true. Demo is unaffected. |
+| `InpDryRun` | `false` | Log the signal it would send, send nothing. Start here if you only want to watch. |
+| `InpMagic` | `20261019` | Its own label on its trades. It never touches anything else. |
+| `InpRiskPercent` | `1.0` | Percent of equity risked per trade. |
+| `InpRiskMoney` | `50.0` | Or a fixed amount. The **smaller** of the two wins, so a small account still risks a small sum. |
+| `InpMaxLots` | `2.0` | Hard cap on volume. |
+| `InpMaxSpreadPoints` | `25` | Skip the entry when the spread is wider. `0` turns it off. |
+| `InpMinRR` | `1.5` | Reward:risk the target is built from. |
+| `InpTimeframe` | `M5` | Chart timeframe the rule reads. It can differ from the chart you attach it to. |
+| `InpORMinutes` | `60` | Length of the opening range. |
+| `InpAtrMult` | `0.5` | ATR multiple behind the entry for the stop. |
+| `InpAllowShort` | `false` | Downside breaks too. Off by default. |
+| `InpSessionStart` / `InpSessionEnd` | `03:05` / `19:00` | New York time, no entries outside. |
+| `InpFlatBy` | `20:55` | Close everything of ours at this New York time. |
+| `InpMaxTradesPerDay` | `1` | Entries a day. |
+| `InpMaxDailyLoss` | `150` | Stop for the day after this much realised loss. `0` turns it off. |
+| `InpBreakevenAtR` | `1.0` | Move the stop to the entry here. `0` is off. |
+| `InpTrailAtR` | `1.0` | Start trailing here. `0` is off. |
+| `InpTrailPoints` | `150` | Trail distance, in points. |
+| `InpPartialAtR` / `InpPartialPercent` | `0` / `50` | Take part of the position at an R. Off by default. |
+
+Every input has a one-line comment next to it in MetaTrader's input dialog, so
+you do not have to come back to this table.
+
+## What you will see
+
+On the chart, a top-left block: symbol and timeframe, account type, the New
+York clock and the session window, whether the session is open or closed, the
+opening range once it has formed, the ATR and the spread, today's entries and
+realised profit, the risk budget, and the one line that matters:
+`trading: yes`, or `trading: no, <the exact switch that is missing>`.
+
+In the Toolbox, `Experts` tab: one line at startup with the account type and
+the session, and then a line per decision (`SENT`, `DRY RUN would have sent`,
+`no order: <why>`, `closed #<ticket>`, `stop trailed to ...`). Nothing prints on
+every tick, so the log stays readable.
+
+## When nothing happens
+
+- **`trading: no, the AutoTrading button in the toolbar is off`**: click it. It
+  is the big button at the top; it has to be green.
+- **`... Options > Expert Advisors > Allow algorithmic trading is off`**:
+  `Tools > Options > Expert Advisors`, tick it, restart the EA.
+- **`... a REAL-money account and InpAllowLive is false`**: that is the guard
+  working. Use a demo account, or set the input true if you really mean it.
+- **`opening range: not formed yet`**: it is before, or inside, the first
+  `InpORMinutes` of the session. It also needs at least two bars in that
+  window, so a chart that was just opened waits.
+- **`no order: under the broker's smallest lot`**: the risk budget is too small
+  for one minimum lot at this stop distance. Raise `InpRiskPercent` /
+  `InpRiskMoney`, or pick a smaller-value symbol.
+- **`no order: it needs X of margin, over 40% of free margin`**: lower
+  `InpMaxLots`, or `InpMaxMarginPct` deliberately.
+- **`invalid stops` from the broker (retcode 10016)**: some brokers quote a
+  bigger stops level than the terminal reports. Raise `InpStopBufferPoints` to
+  20 or 30.
+- **`not sent: 10027`**: algorithmic trading is still off. Back to step 3.
+- **`not sent: 10018`**: the market is closed for this symbol. Nothing to fix;
+  the EA tries again on the next bar.
+
+## What this EA is not
+
+It does not read the news filter, the scanner, or the analyst sheet from the
+rest of the pack. Those live in Python (`trader-mt5/`, `dtcli`) and stay there.
+It also will not trade through a weekend, a holiday, or a closed market.
+
+It is education and tooling, not financial advice. Most people who day trade
+lose money. A stop is a plan, not a guarantee, and slippage is real.
+
+## Pairs with
+
+- `trader-mt5/START-HERE.md` - the Python desk, in order.
+- `trader-mt5/GUIDE-urdu.md` - the same walkthrough in Urdu.
+- `trader-mt5/ea/DayTraderMT5.mq5` - this EA.
+- `dtcli` - the whole pack as one program:
+  <https://github.com/MHR4u/day-trader-skill/releases/download/dtcli-latest/dtcli.exe>

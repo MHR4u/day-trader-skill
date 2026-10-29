@@ -22,11 +22,11 @@ python3 --version        # Windows par: python --version
 
 ```bash
 python3 -m unittest discover -s tests
-# Ran 391 tests ... OK
+# Ran 405 tests ... OK
 ```
 
 Ye ek synthetic demo broker (GMT+3) par chalta hai, internet ki zaroorat nahi.
-Agar 391 OK aaye to pack theek hai.
+Agar 405 OK aaye to pack theek hai.
 
 ## 4. MetaTrader 5 se jodna (Windows)
 
@@ -49,6 +49,29 @@ Agar 391 OK aaye to pack theek hai.
 
 Agar `doctor` mein `MetaTrader5 package: NOT available` aaye to step 3 dobara karein,
 aur `initialize failed` aaye to terminal khula + logged in hona chahiye.
+
+## 4b. Sirf ek file: EA jo khud trade karta hai
+
+Agar aap Python bilkul nahi chalana chahte, to poora rule ek Expert Advisor
+mein bhi maujood hai: `trader-mt5/ea/DayTraderMT5.mq5`. Ye terminal ke andar
+khud trade karta hai, aap ko har order par "yes" nahi dena parta.
+
+1. MT5 mein `File > Open Data Folder > MQL5 > Experts`, aur
+   `DayTraderMT5.mq5` wahan copy karein.
+2. MetaEditor (terminal mein **F4**) kholein, file kholein, **F7** dabayein.
+   Neeche `0 errors, 0 warnings` aana chahiye.
+3. Terminal ka **AutoTrading** button ON, aur
+   `Tools > Options > Expert Advisors > Allow algorithmic trading` ON.
+4. **M5 chart** kholein (jo symbol trade karna hai), Navigator se
+   `DayTraderMT5` chart par drag karein, `Allow algorithmic trading` tick karein.
+5. Chart par top-left panel batata hai: session khula hai ya band, opening
+   range ban gaya ya nahi, aaj kitne trade, aur `trading: yes` ya `no, <wajah>`.
+
+Demo account par pehle chalayein. REAL account par ye tab tak trade nahi karega
+jab tak aap `InpAllowLive` ko `true` na karein. Sirf signal dekhna ho to
+`InpDryRun = true` kar dein: log mein likha aayega, order nahi jayega.
+
+Poori tafseel: `trader-mt5/ea/README.md`.
 
 ## 5. Apna config set karein
 
@@ -139,9 +162,10 @@ Bina Claude Code ke: `trader-mt5/SKILL.md` ko chat ke shuru mein paste kar dein.
 | `trader-mt5/SKILL.md` | MT5 desk ka poora manual |
 | `trader-mt5/GUIDE-urdu.md` | yehi cheez Urdu/Hinglish mein, detail ke sath |
 | `trader-mt5/mt5.py` | terminal, data, execute, manage, guard, backtest |
+| `trader-mt5/ea/DayTraderMT5.mq5` | EA: poora rule MT5 ke andar, khud autotrade |
 | `trader-budget/lots.py` | lots sizing |
 | `trader-budget/config.example.json` | default limits + `mt5` block |
-| `tests/` | 391 tests + demo broker fixtures |
+| `tests/` | 405 tests + demo broker fixtures |
 
 ## 10. Yaad rakhein
 
