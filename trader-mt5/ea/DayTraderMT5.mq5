@@ -33,7 +33,7 @@
 //+------------------------------------------------------------------+
 #property copyright "day-trader-skill, MIT"
 #property link      "https://github.com/MHR4u/day-trader-skill"
-#property version   "1.23"
+#property version   "1.24"
 #property description "Trend-filtered opening-range breakout with ATR stop, R target, risk-percent sizing,"
 #property description "spread and stops-level gates, one trade a day, a daily loss stop, breakeven, trailing,"
 #property description "partial take-profit and a flat-by time. Demo by default: a REAL account needs InpAllowLive."
@@ -170,6 +170,7 @@ int      g_uiX          = 14;     // dashboard cursor
 int      g_uiY          = 24;
 int      g_nyOffset     = -5;     // New York's offset from GMT, set by ToNewYork
 datetime g_flatTry      = 0;      // the last flat-by attempt, so it is not repeated on every tick
+int      g_rangeDay     = 0;      // the New York day whose opening range was already logged
 
 #define GATE_PREFIX "DTMT5_"
 
@@ -1454,10 +1455,15 @@ void TryEntry()
                                       DoubleToString(rangeHigh, _Digits), HHMM(orEnd)));
       return;
    }
-   LogRule("range", StringFormat("opening range %s - %s, mid %s, %d bars, %s points wide",
-                                 DoubleToString(rangeLow, _Digits), DoubleToString(rangeHigh, _Digits),
-                                 DoubleToString(rangeMid, _Digits), orBars,
-                                 DoubleToString((rangeHigh - rangeLow) / _Point, 0)));
+   int today = DayIndexOf(nyNow);
+   if(g_rangeDay != today)                       // the range is fixed for the day: say it once
+   {
+      g_rangeDay = today;
+      Log("RULE", StringFormat("opening range %s - %s, mid %s, %d bars, %s points wide",
+                               DoubleToString(rangeLow, _Digits), DoubleToString(rangeHigh, _Digits),
+                               DoubleToString(rangeMid, _Digits), orBars,
+                               DoubleToString((rangeHigh - rangeLow) / _Point, 0)));
+   }
    if(g_minRangePoints > 0.0 && (rangeHigh - rangeLow) / _Point < g_minRangePoints)
    {
       LogRule("narrow", StringFormat("opening range is %s points, under the floor you set (%s): no entries today",
@@ -2073,8 +2079,12 @@ string NextTrigger()
       text += " (shorts off)";
 
    double last = rates[1].close;
-   if(g_useTrend && last > high && !TrendUp())
+   if(!g_shorts && last < low)
+      text = "below the range: shorts are off (RULE page)";
+   else if(g_useTrend && last > high && !TrendUp())
       text = "close above " + DoubleToString(high, _Digits) + " but the trend is " + TrendWord();
+   else if(g_shorts && g_useTrend && last < low && !TrendDown())
+      text = "close below " + DoubleToString(low, _Digits) + " but the trend is " + TrendWord();
    if(g_spreadMax > 0.0 && SpreadPoints() > g_spreadMax)
       text = "a signal would be blocked: spread " + DoubleToString(SpreadPoints(), 0) + " over " +
              DoubleToString(g_spreadMax, 0);
@@ -2209,7 +2219,7 @@ void UiActions()
 
 void UiFooter()
 {
-   string foot = "v1.23  magic " + IntegerToString(g_magic) + "  " + (g_verbose ? "verbose" : "quiet") + " log";
+   string foot = "v1.24  magic " + IntegerToString(g_magic) + "  " + (g_verbose ? "verbose" : "quiet") + " log";
    UiText(PANEL_TAG + "foot", g_uiX + PANEL_PAD, g_uiY, foot, CLR_LABEL, 7, "Segoe UI",
           ANCHOR_LEFT_UPPER);
    g_uiY += 12;
@@ -2584,12 +2594,25 @@ void DrawPack()
            (g_alertPopup || g_alertSound || g_alertPush) ? CLR_GOOD : CLR_LABEL);
    RowRead("p_desk", "mt5 desk", "magic " + IntegerToString(g_magic) + ", " + AccountModeWord(), CLR_VALUE);
 
-   UiSection("py", "IN THE PYTHON DESK (dtcli)");
-   RowRead("p_news", "news", "dtcli news", CLR_LABEL);
-   RowRead("p_analyst", "analyst", "dtcli analyst", CLR_LABEL);
-   RowRead("p_pelosi", "pelosi", "dtcli pelosi", CLR_LABEL);
-   RowRead("p_tm", "time machine", "dtcli timemachine", CLR_LABEL);
-   UiLine("p_note", "those read the web; the EA stays offline", CLR_LABEL, 7);
+   // all twelve skills, one line each, and what each one actually does
+   UiSection("py", "THE TWELVE SKILLS (dtcli)");
+   RowRead("p_mt5", "mt5", "account, bars, execute", CLR_LABEL);
+   RowRead("p_budget2", "budget", "size in lots from your risk", CLR_LABEL);
+   RowRead("p_risk2", "risk", "PASS or BLOCK before an order", CLR_LABEL);
+   RowRead("p_broker2", "broker", "the ticket and your yes", CLR_LABEL);
+   RowRead("p_entry2", "entry", "one setup, bar by bar", CLR_LABEL);
+   RowRead("p_exit2", "exit", "stop and target, written", CLR_LABEL);
+   RowRead("p_scanner", "scanner", "setups across US charts", CLR_LABEL);
+   RowRead("p_alerts", "alerts", "price, stop, target, time", CLR_LABEL);
+   RowRead("p_news", "news", "headlines for a ticker", CLR_LABEL);
+   RowRead("p_analyst", "analyst", "SEC earnings facts", CLR_LABEL);
+   RowRead("p_pelosi", "pelosi", "Congress trade disclosures", CLR_LABEL);
+   RowRead("p_time", "timemachine", "replay the session 10k times", CLR_LABEL);
+
+   UiSection("run", "HOW TO RUN THEM");
+   UiLine("p_cmd", "dtcli <tool> --help  (or dtcli.exe)", CLR_VALUE, 7);
+   UiLine("p_cmd2", "dtcli mt5 doctor, dtcli news AAPL", CLR_VALUE, 7);
+   UiLine("p_note", "they read the web; this EA stays offline", CLR_LABEL, 7);
 }
 
 //+------------------------------------------------------------------+
@@ -2848,7 +2871,7 @@ int OnInit()
 
    // the banner, then the whole configuration as a small table
    Log("INIT", "-------------------------------------------------------------");
-   Log("INIT", "DayTraderMT5 v1.23 on " + _Symbol + " " + PeriodDescription(g_tf) +
+   Log("INIT", "DayTraderMT5 v1.24 on " + _Symbol + " " + PeriodDescription(g_tf) +
               ", account " + AccountModeWord() + " #" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) +
               ", magic " + IntegerToString(g_magic));
    Log("INIT", "-------------------------------------------------------------");

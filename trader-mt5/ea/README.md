@@ -118,7 +118,7 @@ Click Trading buttons stay visible; move it with `InpPanelX` / `InpPanelY`:
 | `MANAGE` | breakeven, trailing, partial, slippage, stop buffer, the three alert switches, and the verbose log |
 | `LOG` | the last eight console lines, on the chart, and today's journal: closed trades, wins/losses, net, the last one |
 | `TEST` | can it trade right now (eleven gates, PASS or NO, and the two that need a price: stops distance and margin) and the exact order it would send; one button, `RUN ORDER CHECK`, hands that order to the terminal's own `OrderCheck` so you get the broker's verdict without a single order being sent |
-| `PACK` | every skill in the pack, and honestly: what lives inside this EA and what stays in the Python desk |
+| `PACK` | all twelve skills, one line each with what it does, and the two commands to run them (`dtcli <tool> --help`, `dtcli mt5 doctor`); it is explicit that those read the web and this EA does not |
 | `HELP` | how the panel works, what the four buttons do, and the safety lines |
 
 **Every row with buttons is live.** `[-]` and `[+]` move a number by the step in

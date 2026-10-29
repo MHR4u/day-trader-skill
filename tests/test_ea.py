@@ -98,8 +98,8 @@ class TheFile(unittest.TestCase):
         text = source()
         version = re.search(r'#property version\s+"([0-9.]+)"', text)
         self.assertIsNotNone(version)
-        self.assertEqual(version.group(1), "1.23")
-        self.assertIn("v1.23", text, "the banner and the panel footer name the version")
+        self.assertEqual(version.group(1), "1.24")
+        self.assertIn("v1.24", text, "the banner and the panel footer name the version")
         self.assertIn("#property copyright", text)
         self.assertIn("#property link", text)
 
@@ -179,6 +179,15 @@ class TheConsole(unittest.TestCase):
         self.assertIn("void LogRule(", text)
         self.assertIn("g_ruleKey", text)
         self.assertIn("InpVerbose", text)
+
+    def test_the_opening_range_is_logged_once_a_day(self):
+        """Two lines on every bar is a log nobody reads: the range is fixed for
+        the day, so it is said once, and the waiting line only on a change."""
+        text = source()
+        self.assertIn("g_rangeDay", text)
+        entry = body_of(text, "TryEntry")
+        self.assertIn("g_rangeDay", entry)
+        self.assertIn("g_rangeDay != today", entry)
 
     def test_the_chart_keeps_its_own_copy(self):
         text = source()
@@ -403,6 +412,31 @@ class TheProof(unittest.TestCase):
         self.assertIn("NextTrigger()", body_of(text, "DrawDash"))
         self.assertIn("NextTrigger()", body_of(text, "DrawTest"))
         self.assertIn("NextTrigger()", body_of(text, "Heartbeat"))
+
+    def test_no_page_draws_the_same_key_twice(self):
+        """Two rows with one key are two labels drawn on top of each other."""
+        text = source()
+        call = re.compile(r'(?:RowRead|RowEdit|RowCycle|RowToggle|UiLine|UiSection|UiBar|UiWide)\("([A-Za-z_0-9]+)"')
+        for page in ("DrawDash", "DrawRule", "DrawRisk", "DrawClock", "DrawManage",
+                     "DrawLog", "DrawTest", "DrawPack", "DrawHelp"):
+            body = body_of(text, page)
+            keys = call.findall(body)
+            for key in set(keys):
+                drawn = keys.count(key)
+                if drawn == 1:
+                    continue
+                # two arms of one if are fine: only one of them ever runs
+                self.assertIn("else", body, "%s draws %s twice with no if/else" % (page, key))
+                self.assertEqual(drawn, 2, "%s draws %s %d times" % (page, key, drawn))
+
+    def test_the_pack_page_lists_every_skill(self):
+        """The page is called PACK: all twelve, one line each, not four."""
+        page = body_of(source(), "DrawPack")
+        for name in ("mt5", "budget", "risk", "broker", "entry", "exit",
+                     "scanner", "alerts", "news", "analyst", "pelosi", "timemachine"):
+            self.assertIn('"%s"' % name, page, name)
+        self.assertIn("dtcli", page)
+        self.assertIn("offline", page)
 
     def test_the_panel_starts_below_the_buy_sell_corner(self):
         text = source()

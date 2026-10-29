@@ -8,7 +8,7 @@ Ye file sirf `DayTraderMT5.mq5` ke bare mein hai. Do hisse hain:
 Dono ka ek hi maqsad: aapko har waqt pata ho ke EA ne kya dekha, kya socha,
 kya kiya, aur agar kuch nahi kiya to kyun nahi kiya.
 
-**v1.23:** dashboard 9 pages ka hai (DASH, RULE, RISK, CLOCK, MANAGE, LOG,
+**v1.24:** dashboard 9 pages ka hai (DASH, RULE, RISK, CLOCK, MANAGE, LOG,
 TEST, PACK, HELP), aur har number chart par hi **click se badalta** hai: `[-]`
 `[+]` se number, `ON/OFF` se switch, `<` `>` se list. Jo aap click karte hain wo
 terminal ke global variables mein save ho jata hai, is liye chart band kar ke
@@ -91,7 +91,7 @@ function ke andar, is liye har line ka format ek jaisa hai.
 
 ```
 2026.10.29 13:58:02 | INIT  | -------------------------------------------------------------
-2026.10.29 13:58:02 | INIT  | DayTraderMT5 v1.23 on XAUUSD M5, account DEMO #5001234, magic 20261019
+2026.10.29 13:58:02 | INIT  | DayTraderMT5 v1.24 on XAUUSD M5, account DEMO #5001234, magic 20261019
 2026.10.29 13:58:02 | INIT  | -------------------------------------------------------------
 2026.10.29 13:58:02 | CONF  | rule      : M5 bars, EMA 50/200, opening range 60 min, long only
 2026.10.29 13:58:02 | CONF  | stops     : 0.50 ATR behind the entry or the range mid, target 1.50R
@@ -134,7 +134,7 @@ Har line ek hi cheez batati hai: is waqt rule kis stage par hai.
 | --- | --- | --- |
 | `no opening range yet: the session has not printed two bars inside 03:05-09:05 New York` | session shuru hua par 2 bar bhi nahi bane | intezar; chart naya khula ho to thora waqt |
 | `opening range still forming: 7 bar(s), 2388.10 - 2393.40, done at 09:05` | range ban raha hai, live high/low | kuch nahi, ye normal hai |
-| `opening range 2388.10 - 2393.40, mid 2390.75, 12 bars, 530 points wide` | range ban gaya | ab break ka intezar |
+| `opening range 2388.10 - 2393.40, mid 2390.75, 12 bars, 530 points wide` | range ban gaya (ye line **din mein ek dafa** aati hai, har bar nahi) | ab break ka intezar |
 | `waiting: XAUUSD M5 closed 2391.20, inside the range (range 2388.10 - 2393.40, trend up)` | break nahi hua, trend up | intezar |
 | `waiting: ... closed 2394.00, above the range, but the trend filter disagrees` | break hua par EMA ulta | intezar; trend filter jaan boojh kar laga hai |
 | `waiting: ... closed 2385.00, below the range, but short entries are off (InpAllowShort)` | neeche break, par short band | chahein to `InpAllowShort = true` |
@@ -306,7 +306,7 @@ badalne par purane page ke objects hata diye jate hain, naye ban jate hain.
 | = OPENING RANGE ...  (yahi 7 sections DASH par)    |
 | ...                                                |
 |  [ PAUSE ] [ DRY OFF ] [ CLOSE OUR ] [ RESET ]     |
-| v1.23  magic 20261019  quiet log                   |
+| v1.24  magic 20261019  quiet log                   |
 +----------------------------------------------------+
 ```
 
@@ -462,10 +462,36 @@ refresh hota hai, is liye session khulne par gates khud badalte dikhte hain.
 | broker | broker ka last jawab |
 | alerts | alerts on/off |
 | mt5 desk | magic number aur account type |
-| news, analyst, pelosi, time machine | `dtcli ...`: ye Python side par hain, EA offline rehta hai |
 
-Aakhri line saaf likhti hai: **those read the web; the EA stays offline**. Yani
-jo cheez EA ke andar nahi hai, wo jhooti tarah andar dikhayi nahi jati.
+Neeche **THE TWELVE SKILLS (dtcli)** - poore pack ki barah skills, ek ek line par,
+aur har ek ka kaam:
+
+| skill | kaam |
+| --- | --- |
+| mt5 | account, bars, execute (terminal ka poora desk) |
+| budget | risk budget se lots ka hisaab |
+| risk | order se pehle PASS ya BLOCK |
+| broker | ticket, aap ka `yes`, aur order |
+| entry | ek setup, bar bar bar |
+| exit | stop aur target, pehle likhe hue |
+| scanner | US charts par setups |
+| alerts | price, stop, target, flat-by ke alerts |
+| news | ek ticker ki headlines |
+| analyst | SEC earnings facts |
+| pelosi | Congress ki trade disclosures |
+| timemachine | session ko 10,000 dafa replay |
+
+Aur **HOW TO RUN THEM**:
+
+```
+dtcli <tool> --help  (or dtcli.exe)
+dtcli mt5 doctor, dtcli news AAPL
+they read the web; this EA stays offline
+```
+
+Yani EA khud in tools ko **chalata nahi** (wo offline hai, aur us ke paas internet
+ki ijazat nahi) - wo sirf batata hai ke kaunsa tool kya karta hai aur kaise
+chalta hai. Asli output ke liye Windows ke terminal mein `dtcli <tool>` likhein.
 
 ### 11.9 Page HELP - kaise chalayein
 
@@ -733,6 +759,7 @@ mutabiq:
 | `past flat-by 20:55: entries resume tomorrow` | din khatam | kal |
 | `range still forming, ready by 04:05` | aaj ki opening range abhi bani nahi | intezar; CLOCK page se `Opening range` kam karein |
 | `long: a M5 close above 2412.30 (shorts off)` | price range ke andar hai | intezar; ya RULE page se `Short entries` on |
+| `below the range: shorts are off (RULE page)` | price range ke **neeche** hai, yani short ka signal, par short band | RULE page par `Short entries` ON, ya kal ka intezar |
 | `close above 2412.30 but the trend is down` | break hai, EMA filter khilaaf | RULE page par `Trend filter` off, ya intezar |
 | `a signal would be blocked: spread 34 over 25` | spread ceiling tight hai (gold par aam) | RULE page > `Max spread` 40-60, ya 0 (off) |
 | `done for the day (1 of 1)` | aaj ki entry ho gayi | kal; `Entries per day` barha sakte hain |
