@@ -150,7 +150,7 @@ double   g_minRangePoints = 0.0;  // a range narrower than this skips the day
 bool     g_alertPopup   = true;
 bool     g_alertSound   = false;
 bool     g_alertPush    = false;
-int      g_page         = 0;      // 0 dash, 1 rule, 2 risk, 3 clock, 4 manage, 5 log, 6 pack, 7 help
+int      g_page         = 0;      // 0 dash, 1 rule, 2 risk, 3 clock, 4 manage, 5 log, 6 test, 7 pack, 8 help
 bool     g_confirmReset = false;
 datetime g_confirmResetAt = 0;
 string   g_lastCheck    = "-";             // the terminal's answer to the order check
@@ -2539,7 +2539,7 @@ void DrawPack()
 }
 
 //+------------------------------------------------------------------+
-//| Page 8: how to use it                                             |
+//| Page 9: how to use it                                             |
 //+------------------------------------------------------------------+
 void DrawHelp()
 {
