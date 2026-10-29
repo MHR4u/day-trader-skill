@@ -32,7 +32,22 @@ python3 "${CLAUDE_SKILL_DIR}/size.py" --write                # write trader/orde
 python3 "${CLAUDE_SKILL_DIR}/size.py" --limit --write        # a limit order at the plan's entry
 python3 "${CLAUDE_SKILL_DIR}/size.py" --limit 364.00 --json  # a limit order at 364.00
 python3 "${CLAUDE_SKILL_DIR}/size.py" --weights AAPL=40,KO=60 --config split.json   # weights mode, below
+
+# MetaTrader 5: lots instead of shares, from the terminal's own spec
+python3 "${CLAUDE_SKILL_DIR}/lots.py"                         # trader/plan.json + trader/mt5/context.json
+python3 "${CLAUDE_SKILL_DIR}/lots.py" --write                 # -> trader/orders.json (an MT5 order)
+python3 "${CLAUDE_SKILL_DIR}/lots.py" --at-market --write     # fill at the quote, not the plan's entry
+python3 "${CLAUDE_SKILL_DIR}/lots.py" --symbol XAUUSD --entry 2412.50 --stop 2404.10 --target 2430.00
+python3 "${CLAUDE_SKILL_DIR}/lots.py" --partial --symbol EURUSD --lots 0.40 --at-r 1 --pct 50
 ```
+
+`lots.py` is the MT5 half: the risk budget divided by the stop distance in
+money per lot (the symbol's own tick value) plus the commission, floored to
+the broker's volume step, then shrunk to the margin cap. It refuses a stop
+inside the broker's stops level, a spread over the limit, a minimum lot that
+risks more than the budget, and a reward:risk under `min_reward_risk`. The
+order it writes carries its own spec, quote and sizing numbers so trader-risk
+can check it offline. See `trader-mt5/SKILL.md`.
 
 `--now "2026-10-19 10:15"` pins the clock (New York time). A plan for
 another day is refused: make a new one with trader-exit.

@@ -26,6 +26,18 @@ CONTRACT_CFG = {
     "fractional": False, "broker": "alpaca", "paper": True, "blocked": [],
     "allow_options": False, "allow_margin": False, "allow_short": False, "pdt_guard": False,
     "sec_user_agent": "Your Name you@example.com",
+    "mt5": {
+        "allow_live": False, "magic": 20261019, "deviation": 20, "terminal_path": "", "symbol_suffix": "",
+        "symbols": [], "max_spread_pips": 2.0, "max_quote_age_sec": 60, "max_lots_per_order": 2.0,
+        "max_lots_per_symbol": 2.0, "max_open_positions": 3, "max_positions_per_symbol": 1,
+        "max_margin_use_pct": 40, "min_margin_level_pct": 300, "commission_per_lot": 7.0,
+        "risk_pct_per_trade": 1.0, "allow_pending": True, "filling": "auto",
+        "session": {"open": "03:00", "no_entries_before": "03:05", "no_entries_after": "19:00",
+                    "flat_by": "20:55", "rollover": "23:55", "rollover_minutes": 15,
+                    "days": [0, 1, 2, 3, 4]},
+        "guard": {"enabled": False, "breakeven_at_r": 1.0, "trail_at_r": 1.0, "trail_points": 150,
+                  "partial_at_r": 1.0, "partial_pct": 50},
+    },
 }
 # v1's rules, for the weights mode tests
 V1 = {"budget": 5000, "cash_buffer_pct": 10, "max_position_pct": 25, "max_order_usd": 2000, "min_order_usd": 5,

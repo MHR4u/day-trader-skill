@@ -5,22 +5,23 @@ import unittest
 
 from _load import ROOT
 
-# v2, the day-trading pack: the eleven folders the reel's repo card shows
+# v2.1, the day-trading pack: the twelve folders the repo card shows, the
+# last of them the MetaTrader 5 desk
 SKILLS = ["trader-scanner", "trader-news", "trader-entry", "trader-exit", "trader-timemachine",
           "trader-risk", "trader-budget", "trader-broker", "trader-alerts", "trader-analyst",
-          "trader-pelosi"]
-ABOUT = ("11 Claude skills for day trading: scan thousands of charts, track breaking news, time every "
-         "entry and exit, and replay every outcome before you risk a dollar.")
+          "trader-pelosi", "trader-mt5"]
+ABOUT = ("12 Claude skills for day trading: scan thousands of charts, track breaking news, time every "
+         "entry and exit, and replay every outcome before you risk a dollar. Plus a MetaTrader 5 desk.")
 # skills on the way to an order carry the safety block
 ORDER_PATH = ["trader-scanner", "trader-entry", "trader-exit", "trader-timemachine", "trader-budget",
-              "trader-pelosi", "trader-risk", "trader-broker", "trader-alerts"]
+              "trader-pelosi", "trader-risk", "trader-broker", "trader-alerts", "trader-mt5"]
 V1_ONLY = ["trader-copycat", "trader-screener", "trader-tax", "trader-rebalance"]
 
 
 def frontmatter(path):
     with open(path, encoding="utf-8") as fh:
         text = fh.read()
-    m = re.match(r"^---\n(.*?)\n---\n", text, re.S)
+    m = re.match(r"^---\r?\n(.*?)\r?\n---\r?\n", text, re.S)
     return (m.group(1) if m else ""), text
 
 
@@ -32,15 +33,24 @@ def every_text_file():
                 yield os.path.join(base, f)
 
 
+# The tree the pack ships, not the droppings a run leaves behind: the tools
+# write trader/ in whatever directory they run from, and a build makes
+# build/ and dist/.
+RUNTIME = {".git", "__pycache__", ".pytest_cache", "build", "dist", "trader"}
+
+
 class Repo(unittest.TestCase):
-    def test_eleven_skill_folders_at_the_root(self):
+    def test_twelve_skill_folders_at_the_root(self):
         found = sorted(d for d in os.listdir(ROOT)
                        if os.path.isfile(os.path.join(ROOT, d, "SKILL.md")))
         self.assertEqual(found, sorted(SKILLS))
 
     def test_root_matches_the_reel(self):
-        root = sorted(d for d in os.listdir(ROOT) if not d.startswith(".git"))
-        self.assertEqual(root, sorted([".claude-plugin", "LICENSE", "README.md", "tests"] + SKILLS))
+        root = sorted(d for d in os.listdir(ROOT) if d not in RUNTIME)
+        want = sorted([".claude-plugin", ".gitattributes", ".github", ".gitignore", "LICENSE",
+                       "README.md", "tests"] + SKILLS)
+        self.assertEqual(root, want, "unexpected at the root: %s, missing: %s"
+                         % (sorted(set(root) - set(want)), sorted(set(want) - set(root))))
 
     def test_frontmatter_name_and_description(self):
         for s in SKILLS:

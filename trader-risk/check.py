@@ -62,6 +62,7 @@ so trader-broker only shows an order as ready if THIS exact order passed today.
 import argparse
 import datetime
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -126,6 +127,31 @@ EARLY = datetime.time(13, 0)
 
 class RiskError(Exception):
     pass
+
+
+# ---------------------------------------------------------------- MT5 rules
+# trader-mt5/mt5rules.py is the MT5 half of this check. The folder names have
+# hyphens, so it is loaded by path. Missing folder or broken file = every MT5
+# order is blocked with the reason, never silently skipped.
+
+_MT5R = None
+_MT5_ERR = None
+
+
+def mt5rules():
+    global _MT5R, _MT5_ERR
+    if _MT5R is not None or _MT5_ERR is not None:
+        return _MT5R, _MT5_ERR
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir,
+                        "trader-mt5", "mt5rules.py")
+    try:
+        spec = importlib.util.spec_from_file_location("trader_mt5_rules", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        _MT5R = mod
+    except Exception as e:                                  # pragma: no cover
+        _MT5_ERR = "cannot load trader-mt5/mt5rules.py (%s)" % e
+    return _MT5R, _MT5_ERR
 
 
 # ---------------------------------------------------------------- time (New York, no tz files)
@@ -370,17 +396,30 @@ def day_trades(state, today):
 
 # ---------------------------------------------------------------- the check
 
-def check(orders, cfg, portfolio=None, prices=None, state=None, today=None, now=None, price_times=None):
+def check(orders, cfg, portfolio=None, prices=None, state=None, today=None, now=None, price_times=None,
+          ctx=None):
     """Pure function. Returns {"results": [...], "pass": n, "block": n, "warnings": [...]}.
 
     now          naive UTC (default: the real clock); its New York date is "today"
-    price_times  {SYM: naive UTC time of that price}; None = every price counts as fresh"""
+    price_times  {SYM: naive UTC time of that price}; None = every price counts as fresh
+    ctx          the MT5 snapshot (trader/mt5/context.json). Orders whose venue is
+                 mt5 are checked by trader-mt5/mt5rules.py: volume ladder, stops
+                 level, spread, margin, rollover, the lot and daily limits. They
+                 are never run through the share-based rules below, and the rules
+                 below are never run through the MT5 ones."""
     c = dict(DEFAULTS)
     c.update(cfg or {})
     prices = {str(k).upper(): float(v) for k, v in (prices or {}).items() if _f(v)}
     now_utc = now or parse_now(None)
     now_et = to_eastern(now_utc)
     today = today or now_et.date().isoformat()
+    ctx = ctx or {}
+    mt5mod, mt5_err = mt5rules()
+    mt5_pairs = []
+    if mt5mod is not None:
+        mt5_pairs = [(i, o) for i, o in enumerate(orders, 1) if mt5mod.is_mt5(o or {})]
+    if portfolio is None and not _f(c.get("budget")) and (ctx.get("account") or {}).get("balance"):
+        c["budget"] = float(ctx["account"]["balance"])
     acct, top_warn = account(c, portfolio, prices)
     blocked = {str(b).upper() for b in c.get("blocked") or []}
     done_today = placed_today(state, today)
@@ -397,6 +436,34 @@ def check(orders, cfg, portfolio=None, prices=None, state=None, today=None, now=
     placed_keys = {(str(r.get("symbol", "")).upper(), r.get("side")) for r in done_today}
     win_reasons, win_warns = window_check(now_et, c)
     pdt_n, pdt_list = day_trades(state, today) if c.get("pdt_guard") else (0, [])
+    mt5_res = None
+    mt5_by_index = {}
+    if mt5_pairs:
+        if mt5mod is None:
+            for i, o in mt5_pairs:
+                mt5_by_index[i] = {
+                    "index": i, "symbol": str(o.get("symbol", "")).upper(), "side": o.get("side"),
+                    "kind": "entry", "venue": "mt5", "amount": "%s lots" % (o.get("volume") or "?"),
+                    "value_usd": None, "entry_ref": None, "entry_ref_from": "", "stop": o.get("sl"),
+                    "target": o.get("tp"), "risk_per_share": None, "max_loss": None, "reward_risk": None,
+                    "fingerprint": hashlib.sha256(json.dumps(
+                        {k: o.get(k) for k in sorted(o)}, sort_keys=True, default=str).encode()).hexdigest()[:16],
+                    "verdict": "BLOCK", "reasons": ["mt5: " + (mt5_err or "the MT5 rules are not available")],
+                    "warnings": [], "info": []}
+        else:
+            try:
+                mt5_res = mt5mod.check_orders(mt5_pairs, cfg, ctx, state, today, now_utc)
+                mt5_by_index = {r["index"]: r for r in mt5_res["results"]}
+            except Exception as e:                          # pragma: no cover
+                for i, o in mt5_pairs:
+                    mt5_by_index[i] = {
+                        "index": i, "symbol": str(o.get("symbol", "")).upper(), "side": o.get("side"),
+                        "kind": "entry", "venue": "mt5", "amount": "%s lots" % (o.get("volume") or "?"),
+                        "value_usd": None, "entry_ref": None, "entry_ref_from": "", "stop": o.get("sl"),
+                        "target": o.get("tp"), "risk_per_share": None, "max_loss": None,
+                        "reward_risk": None, "fingerprint": "",
+                        "verdict": "BLOCK", "reasons": ["mt5: the MT5 check failed: %s" % e],
+                        "warnings": [], "info": []}
     seen = set()
     results = []
     batch_entries, batch_loss = 0, 0.0
@@ -416,6 +483,9 @@ def check(orders, cfg, portfolio=None, prices=None, state=None, today=None, now=
         return prices[sym] if -60 <= age <= FRESH_MINUTES * 60 else None
 
     for i, o in enumerate(orders, 1):
+        if i in mt5_by_index:
+            results.append(mt5_by_index[i])
+            continue
         reasons, warns, info = [], [], []
         later = []                       # entry-only reasons, turned into warnings for an exit
         sym = str(o.get("symbol", "")).strip().upper()
@@ -691,7 +761,7 @@ def check(orders, cfg, portfolio=None, prices=None, state=None, today=None, now=
             "reasons": reasons, "warnings": warns, "info": info,
         })
 
-    return {
+    out = {
         "date": today,
         "now_new_york": now_et.strftime("%Y-%m-%d %H:%M"),
         "paper": bool(c.get("paper", True)),
@@ -703,6 +773,17 @@ def check(orders, cfg, portfolio=None, prices=None, state=None, today=None, now=
         "today": {"orders_placed": count_today, "entries_placed": len(entries_today),
                   "loss_at_risk": round(loss_today, 2), "day_trades_5d": pdt_n if c.get("pdt_guard") else None},
     }
+    if mt5_res is not None and (mt5_res.get("account") or {}).get("login") is not None:
+        out["mt5"] = {k: mt5_res.get(k) for k in
+                      ("account", "loss_today", "realized_today", "closed_today", "server_offset_hours",
+                       "now_server", "rollover_window_ny", "venue")}
+        mt5_acct = mt5_res.get("account") or {}
+        out["cash_after"] = mt5_acct.get("free_margin_after", mt5_acct.get("free_margin", out["cash_after"]))
+        out["warnings"] = list(top_warn) + list(mt5_res.get("warnings") or [])
+        if any(r.get("venue") != "mt5" for r in results) and mt5_pairs:
+            out["warnings"].append("this batch mixes share orders and MT5 orders: each half is checked with "
+                                   "its own limits, so the daily totals are counted separately")
+    return out
 
 
 def _pct(x):
@@ -731,8 +812,25 @@ def report(res):
         for x in r["warnings"]:
             lines.append("        ~ " + x)
     lines.append("")
-    lines.append("%d passed, %d blocked at %s New York. Cash after the passed orders: %s (%s account)."
-                 % (res["pass"], res["block"], res["now_new_york"], money(res["cash_after"]),
+    if res.get("mt5"):
+        a = res["mt5"].get("account") or {}
+        lines.append("MT5 %s account %s on %s: balance %s, equity %s, free margin %s%s" % (
+            str(a.get("trade_mode", "demo")).upper(), a.get("login") or "?", a.get("server") or "?",
+            money(a.get("balance")), money(a.get("equity")), money(a.get("free_margin")),
+            (", margin level %.0f%%" % a["margin_level"]) if a.get("margin_level") else ""))
+        if res["mt5"].get("closed_today"):
+            lines.append("MT5 today's closed trades: %d, %s" % (res["mt5"]["closed_today"],
+                                                               money(res["mt5"].get("realized_today"))))
+            lines.append("MT5 counted against the daily loss: %s (closed losses plus today's entries at "
+                         "their stops)" % money(res["mt5"].get("loss_today")))
+        if res["mt5"].get("rollover_window_ny"):
+            lines.append("MT5 broker rollover %s to %s New York; terminal time %s (UTC%+d)" % (
+                res["mt5"]["rollover_window_ny"][0], res["mt5"]["rollover_window_ny"][1],
+                res["mt5"].get("now_server"), int(res["mt5"].get("server_offset_hours") or 0)))
+        lines.append("")
+    lines.append("%d passed, %d blocked at %s New York. %s after the passed orders: %s (%s account)."
+                 % (res["pass"], res["block"], res["now_new_york"],
+                    "Free margin" if res.get("mt5") else "Cash", money(res["cash_after"]),
                     "paper" if res["paper"] else "LIVE"))
     if res["block"]:
         lines.append("Blocked orders do not go to the broker. Fix the order or your rules, then check again.")
@@ -773,6 +871,8 @@ def main(argv=None):
                     help="your account; if missing, a fresh account funded with the budget")
     ap.add_argument("--prices", default="trader/prices.json")
     ap.add_argument("--state", default="trader/state/broker.json", help="what trader-broker placed today")
+    ap.add_argument("--mt5-context", dest="mt5_context", default="trader/mt5/context.json",
+                    help="the MT5 snapshot (mt5.py snapshot --write); read only if the file exists")
     ap.add_argument("--now", help="pretend it is this New York time, e.g. \"2026-10-19 10:15\"")
     ap.add_argument("--today", help="YYYY-MM-DD (default: today in New York)")
     ap.add_argument("--out", default="trader/state/risk.json", help="where the verdicts are recorded")
@@ -792,7 +892,8 @@ def main(argv=None):
         pdoc = read_json(a.prices, "prices", required=False) or {}
         prices, times = load_prices(pdoc)
         state = read_json(a.state, "broker state", required=False)
-        res = check(orders, cfg, portfolio, prices, state, a.today, now, times)
+        ctx = read_json(a.mt5_context, "MT5 snapshot", required=False) or {}
+        res = check(orders, cfg, portfolio, prices, state, a.today, now, times, ctx)
         if pdoc.get("as_of"):
             res["prices_as_of"] = pdoc["as_of"]
         if not a.no_write:

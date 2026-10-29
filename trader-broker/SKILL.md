@@ -45,6 +45,18 @@ python3 "${CLAUDE_SKILL_DIR}/ticket.py" log
 is a real yes for that order, builds the flatten ticket, and keeps the log in
 `trader/state/broker.json`. `--now "2026-10-19 10:15"` pins the clock (New York time).
 
+**MT5 tickets.** An order with `"venue": "mt5"` (from `trader-budget/lots.py`)
+renders as lots, the broker's order type, the stop, the target and the money
+at risk, plus the exact JSON that `trader-mt5/mt5.py execute --index N` will
+send to `order_send`. The fingerprint is the MT5 one, so `approve` records
+your yes for exactly that volume, stop and target. After you say yes, the
+final gate is `mt5.py execute`: it re-reads the risk verdict and your yes,
+asks the terminal's own `order_check`, refuses a REAL account unless
+`"mt5.allow_live"` is true, and sends once. `ticket.py result` records the
+terminal's ticket, and `ticket.py fill` leaves `trader/portfolio.json` alone
+for MT5: the terminal owns the position. Closing an MT5 position is
+`mt5.py manage close --symbol X --yes "yes"`, not a new ticket.
+
 ## What it reads and writes
 
 | file | what |
