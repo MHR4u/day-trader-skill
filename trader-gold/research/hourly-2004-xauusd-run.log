@@ -1,0 +1,6 @@
+Status: RESEARCH_ONLY
+Deployment: MT5_VALIDATION_REQUIRED
+Artifacts: /home/user/day-trader-skill/trader-gold/research/hourly-2004-xauusd
+Validation: {"folds": 19, "oos_expectancy_r": -0.004201, "oos_net_profit": -239.74, "oos_profit_factor": 0.989344, "oos_trades": 2226, "positive_fold_ratio": 0.526316, "positive_folds": 10, "positive_year_profit_concentration_pct": 19.42503, "stress_net_profit": -1955.69, "worst_fold_max_drawdown_pct": 4.937704, "worst_fold_stress_profit_factor": 0.628025, "yearly_oos_net_profit": {"2007": -176.09, "2008": 271.01, "2009": 266.42, "2010": -360.12, "2011": 356.84, "2012": 55.31, "2013": -219.99, "2014": 14.66, "2015": 162.53, "2016": -174.17, "2017": 367.38, "2018": -318.47, "2019": -463.96, "2020": 4.53, "2021": -266.63, "2022": -63.95, "2023": -87.62, "2024": 133.92, "2025": 258.64}}
+Coverage gate failed: the data does not start at the requested 2000 date.
+No live approval: compile and run real-tick MT5 tests, then demo forward test.

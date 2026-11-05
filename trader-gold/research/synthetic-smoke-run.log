@@ -1,0 +1,5 @@
+Status: SYNTHETIC_ONLY
+Deployment: MT5_VALIDATION_REQUIRED
+Artifacts: /home/user/day-trader-skill/trader-gold/research/synthetic-smoke
+Validation: {"folds": 6, "oos_expectancy_r": 0.938719, "oos_net_profit": 29871.44, "oos_profit_factor": 7.596818, "oos_trades": 1114, "positive_fold_ratio": 1.0, "positive_folds": 6, "positive_year_profit_concentration_pct": 21.193631, "stress_net_profit": 28246.0, "worst_fold_max_drawdown_pct": 1.690371, "worst_fold_stress_profit_factor": 6.713147, "yearly_oos_net_profit": {"2019": 6098.16, "2020": 6330.84, "2021": 5886.0, "2022": 5996.55, "2023": 5398.33, "2024": 161.54}}
+No live approval: compile and run real-tick MT5 tests, then demo forward test.

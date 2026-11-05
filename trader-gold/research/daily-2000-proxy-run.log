@@ -1,0 +1,5 @@
+Status: RESEARCH_ONLY
+Deployment: MT5_VALIDATION_REQUIRED
+Artifacts: /home/user/day-trader-skill/trader-gold/research/daily-2000-proxy
+Validation: {"folds": 20, "oos_expectancy_r": 0.314195, "oos_net_profit": 175.5, "oos_profit_factor": 1.59873, "oos_trades": 30, "positive_fold_ratio": 0.35, "positive_folds": 7, "positive_year_profit_concentration_pct": 27.056506, "stress_net_profit": 171.17, "worst_fold_max_drawdown_pct": 1.319995, "worst_fold_stress_profit_factor": 0.0, "yearly_oos_net_profit": {"2003": 50.88, "2004": -116.43, "2005": -28.48, "2006": 47.25, "2007": 20.05, "2017": 49.21, "2018": 67.62, "2019": -1.76, "2020": 87.17}}
+No live approval: compile and run real-tick MT5 tests, then demo forward test.

@@ -1,0 +1,15 @@
+{
+  "base_timeframe": "H1",
+  "coverage_pass": false,
+  "end": "2024-01-04T00:00:00Z",
+  "path": null,
+  "required_start": "2000-01-01",
+  "rows": 50112,
+  "seed": 19,
+  "sha256": "10de1d5a01056bdf4e861a8583fa79c47f7366053a21c548b04c580981533486",
+  "start": "2016-01-04T00:00:00Z",
+  "synthetic": true,
+  "warnings": [
+    "Synthetic data is for software testing only, never strategy validation"
+  ]
+}

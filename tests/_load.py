@@ -1,6 +1,7 @@
 """Load a script from a skill folder (the folder names have hyphens)."""
 
 import importlib.util
+import json
 import os
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -13,3 +14,8 @@ def load(folder, name):
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+def gold_config():
+    with open(os.path.join(ROOT, "trader-gold", "config.example.json"), encoding="utf-8") as fh:
+        return json.load(fh)

@@ -1,6 +1,6 @@
 # The Day Trader skill
 
-11 Claude skills for day trading: scan thousands of charts, track breaking news, time every entry and exit, and replay every outcome before you risk a dollar.
+12 Claude skills for day trading: scan thousands of charts, track breaking news, time every entry and exit, replay every outcome before you risk a dollar, and research Gold EAs with walk-forward evidence.
 
 Free, MIT, no signup, no API key. The tools are plain Python that read free
 public data: Yahoo Finance charts, Nasdaq Trader's symbol lists, SEC EDGAR
@@ -57,7 +57,7 @@ The tools need Python 3.8 or newer. Nothing to pip install. The SEC tools
 email in `trader/config.json` (`"sec_user_agent": "Your Name you@example.com"`)
 or in the `SEC_USER_AGENT` environment variable.
 
-## The eleven
+## The twelve
 
 | command | job | what it does |
 | --- | --- | --- |
@@ -72,6 +72,7 @@ or in the `SEC_USER_AGENT` environment variable.
 | `/trader-alerts` | Price Alerts | Rings when a price, a stop or the opening bell hits. |
 | `/trader-analyst` | Earnings Analyst | Reads earnings reports and sums up what changed. |
 | `/trader-pelosi` | Pelosi Tracker | Reads Congress's stock-trade disclosures the minute they are filed. |
+| `/trader-gold` | Gold EA Research | Runs six specialist agents on XAUUSD history, walk-forward tests from the 2000 coverage gate, and generates a safety-first MT5 Expert Advisor. |
 
 ## How to use it
 
@@ -141,6 +142,9 @@ python3 trader-alerts/alerts.py add --from-plan                        # stop, t
 python3 trader-alerts/alerts.py check                                  # rings what hit, once
 python3 trader-analyst/facts.py TSLA                                   # quarters, growth, EPS
 python3 trader-pelosi/ptr.py index --member pelosi                     # her PTRs this year
+python3 trader-gold/factory.py demo --years 8 --no-optimize           # synthetic software check
+python3 trader-gold/factory.py walk-forward --data XAUUSD_H1.csv       # real CSV research
+python3 trader-gold/factory.py review-ea                               # static MT5 source checks
 ```
 
 ```bash
@@ -150,7 +154,9 @@ python3 -m unittest discover -s tests -v
 The tests run offline, on fixtures cut from real data: TSLA's 5-minute bars
 for the 60 days to October 19 2026, the 10:15 AM opening-range scan, Yahoo's
 TSLA headlines that morning, the House Clerk's 2026 index, real PTR text and
-real XBRL facts. They reproduce every number in the example above.
+real XBRL facts. They reproduce every number in the example above. The Gold
+agent tests use deterministic synthetic bars and small CSV fixtures; no large
+market dataset is committed.
 
 ## Fine print
 
@@ -165,6 +171,15 @@ yes for it in the chat. Set your brokerage tool to "Needs approval" in Claude
 (Customize, Connectors, tool permissions), never "Always allow", so Claude's
 own "Allow once / Deny" card is a second check. No options, margin, short
 selling or leverage unless you turn them on.
+
+**Gold EA research is not live approval.** `/trader-gold` coordinates six
+Python agents: data, strategy, risk, backtest, validation and MT5 source
+review. It writes a report, trades, equity, provenance and a research `.set`
+file with `InpEnableNewEntries=false`. The EA can be attached to any MT5 chart
+timeframe from M1 to MN1, but no backtest can guarantee profit or prove a
+professional bot. MetaEditor compilation, real-tick MT5 testing and a demo
+forward test are still required, and only then should you decide whether to
+enable live entries. See `trader-gold/SKILL.md` and `trader-gold/docs/`.
 
 **Paper first.** `"paper": true` is the default in `config.example.json`, and
 Alpaca's MCP server defaults to its paper account. Keys live in environment
@@ -210,6 +225,7 @@ trader-broker/      SKILL.md, ticket.py, claude_desktop_config.example.json
 trader-alerts/      SKILL.md, alerts.py, alerts.example.json
 trader-analyst/     SKILL.md, facts.py, metrics.example.json
 trader-pelosi/      SKILL.md, ptr.py
+trader-gold/        SKILL.md, factory.py, config.example.json, gold/, mt5/, docs/
 tests/              unittest suite + offline fixtures
 ```
 

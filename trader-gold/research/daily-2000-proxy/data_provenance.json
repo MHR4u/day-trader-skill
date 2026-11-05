@@ -1,0 +1,21 @@
+{
+  "base_timeframe": "D1",
+  "coverage_deadline": "2000-01-08T00:00:00Z",
+  "coverage_pass": true,
+  "duplicate_timestamps": 0,
+  "end": "2022-09-03T00:00:00Z",
+  "largest_gap_days": 5.0,
+  "path": "/tmp/gold-research/gold_daily_2000_2022.csv",
+  "price_basis": "bid_ohlc_assumed",
+  "required_start": "2000-01-01",
+  "rows": 5703,
+  "sha256": "2456f85acddedd11ec78c56c9bb500e9bb72bb5a2d415a1a0f401e0ec504938e",
+  "source_description": "Unverified daily Gold OHLC proxy, 2000-01-04 to 2022-09-02, Kaggle mirror, not broker spot XAUUSD",
+  "source_url": "https://github.com/hariomvyas/Commodity-Forecasting/blob/main/Data/gold.csv",
+  "spread_source": "configured_default",
+  "start": "2000-01-04T00:00:00Z",
+  "synthetic": false,
+  "timezone_offset_hours": 0.0,
+  "unordered_rows_sorted": 0,
+  "warnings": []
+}

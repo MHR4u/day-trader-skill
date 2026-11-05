@@ -1,0 +1,29 @@
+{
+  "compiled": false,
+  "compiler_found": false,
+  "compiler_path": null,
+  "mt5_tick_test_passed": false,
+  "note": "Static source review is not compilation, a tick backtest, or live approval",
+  "path": "/home/user/day-trader-skill/trader-gold/mt5/GoldProfessionalEA.mq5",
+  "sha256": "c477dc9ad764c483ea4b4c26345a32864c3ef4a62a3111c8f4ecff0c890ce0c5",
+  "static_checks": {
+    "ATR trailing": true,
+    "break-even": true,
+    "broker stop distance": true,
+    "closed bar signals": true,
+    "custom tester criterion": true,
+    "daily protection": true,
+    "hard SL and TP": true,
+    "higher timeframe validation": true,
+    "indicator readiness": true,
+    "magic isolation": true,
+    "news filter": true,
+    "partial profit": true,
+    "sell execution": true,
+    "server retcode checks": true,
+    "spread filter": true,
+    "total drawdown protection": true,
+    "weekly protection": true
+  },
+  "static_pass": true
+}

@@ -5,15 +5,16 @@ import unittest
 
 from _load import ROOT
 
-# v2, the day-trading pack: the eleven folders the reel's repo card shows
+# v2, the day-trading pack: the twelve folders the repo card now shows
 SKILLS = ["trader-scanner", "trader-news", "trader-entry", "trader-exit", "trader-timemachine",
           "trader-risk", "trader-budget", "trader-broker", "trader-alerts", "trader-analyst",
-          "trader-pelosi"]
-ABOUT = ("11 Claude skills for day trading: scan thousands of charts, track breaking news, time every "
-         "entry and exit, and replay every outcome before you risk a dollar.")
+          "trader-pelosi", "trader-gold"]
+ABOUT = ("12 Claude skills for day trading: scan thousands of charts, track breaking news, time every "
+         "entry and exit, replay every outcome before you risk a dollar, and research Gold EAs with "
+         "walk-forward evidence.")
 # skills on the way to an order carry the safety block
 ORDER_PATH = ["trader-scanner", "trader-entry", "trader-exit", "trader-timemachine", "trader-budget",
-              "trader-pelosi", "trader-risk", "trader-broker", "trader-alerts"]
+              "trader-pelosi", "trader-risk", "trader-broker", "trader-alerts", "trader-gold"]
 V1_ONLY = ["trader-copycat", "trader-screener", "trader-tax", "trader-rebalance"]
 
 
@@ -33,7 +34,7 @@ def every_text_file():
 
 
 class Repo(unittest.TestCase):
-    def test_eleven_skill_folders_at_the_root(self):
+    def test_twelve_skill_folders_at_the_root(self):
         found = sorted(d for d in os.listdir(ROOT)
                        if os.path.isfile(os.path.join(ROOT, d, "SKILL.md")))
         self.assertEqual(found, sorted(SKILLS))
@@ -104,19 +105,23 @@ class Repo(unittest.TestCase):
         # no 3.9+ only modules or syntax in the tools (the README promises 3.8)
         for s in SKILLS:
             folder = os.path.join(ROOT, s)
-            for f in os.listdir(folder):
-                if not f.endswith(".py"):
-                    continue
-                with open(os.path.join(folder, f), encoding="utf-8") as fh:
-                    src = fh.read()
-                for bad in ("import zoneinfo", "from zoneinfo", ".removeprefix(", ".removesuffix(",
-                            "match ", "list[", "dict[", "tuple["):
-                    if bad == "match ":
-                        self.assertNotRegex(src, r"(?m)^\s+match \w+.*:$", "%s/%s" % (s, f))
-                    elif bad.endswith("["):
-                        self.assertNotRegex(src, r"(?<![\w.])%s" % re.escape(bad), "%s/%s" % (s, f))
-                    else:
-                        self.assertNotIn(bad, src, "%s/%s" % (s, f))
+            for base, dirs, files in os.walk(folder):
+                dirs[:] = [d for d in dirs if d != "__pycache__"]
+                for f in files:
+                    if not f.endswith(".py"):
+                        continue
+                    path = os.path.join(base, f)
+                    rel = os.path.relpath(path, folder)
+                    with open(path, encoding="utf-8") as fh:
+                        src = fh.read()
+                    for bad in ("import zoneinfo", "from zoneinfo", ".removeprefix(", ".removesuffix(",
+                                "match ", "list[", "dict[", "tuple["):
+                        if bad == "match ":
+                            self.assertNotRegex(src, r"(?m)^\s+match \w+.*:$", "%s/%s" % (s, rel))
+                        elif bad.endswith("["):
+                            self.assertNotRegex(src, r"(?<![\w.])%s" % re.escape(bad), "%s/%s" % (s, rel))
+                        else:
+                            self.assertNotIn(bad, src, "%s/%s" % (s, rel))
 
     def test_day_trading_limits_ship_in_the_example_config(self):
         with open(os.path.join(ROOT, "trader-budget", "config.example.json")) as fh:

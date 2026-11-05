@@ -1,0 +1,23 @@
+{
+  "base_timeframe": "H1",
+  "coverage_deadline": "2000-01-08T00:00:00Z",
+  "coverage_pass": false,
+  "duplicate_timestamps": 0,
+  "end": "2025-06-06T07:00:00Z",
+  "largest_gap_days": 4.542,
+  "path": "/tmp/gold-research/xauusd_h1_2004_2025.csv",
+  "price_basis": "bid_ohlc_assumed",
+  "required_start": "2000-01-01",
+  "rows": 122028,
+  "sha256": "3b94158402f3628e7b2c4a9fb1f37bca412a3116d279303b788a149e0782ef7b",
+  "source_description": "MT4-exported XAU/USD H1 Bid OHLC, 2004-06-11 to 2025-06-06, timezone not guaranteed, configured spread",
+  "source_url": "https://github.com/FeziweMelvin/XAUUSD-Gold-Price/blob/main/XAU_1h_data.csv",
+  "spread_source": "configured_default",
+  "start": "2004-06-11T07:00:00Z",
+  "synthetic": false,
+  "timezone_offset_hours": 0.0,
+  "unordered_rows_sorted": 0,
+  "warnings": [
+    "Coverage does not begin in the first week of 2000-01-01"
+  ]
+}

@@ -1,0 +1,88 @@
+{
+  "symbol": "XAUUSD",
+  "data": {
+    "base_timeframe": "H1",
+    "timezone_offset_hours": 0.0,
+    "spread_column_unit": "points"
+  },
+  "account": {
+    "initial_balance": 10000.0,
+    "currency": "USD",
+    "price_value_per_lot": 100.0,
+    "volume_min": 0.01,
+    "volume_max": 50.0,
+    "volume_step": 0.01
+  },
+  "execution": {
+    "point_size": 0.01,
+    "magic": 260119,
+    "default_spread_price": 0.2,
+    "max_spread_price": 0.5,
+    "slippage_price": 0.05,
+    "commission_per_lot_side": 7.0,
+    "min_stop_distance_price": 0.3
+  },
+  "strategy": {
+    "signal_timeframe": "H1",
+    "trend_timeframe": "AUTO",
+    "fast_ema": 50,
+    "slow_ema": 200,
+    "breakout_bars": 20,
+    "atr_period": 14,
+    "stop_atr": 2.0,
+    "target_r": 3.0,
+    "min_atr_pct": 0.0,
+    "max_atr_pct": 5.0,
+    "allow_long": true,
+    "allow_short": true
+  },
+  "risk": {
+    "risk_per_trade_pct": 0.25,
+    "max_daily_loss_pct": 2.0,
+    "max_weekly_loss_pct": 4.0,
+    "max_total_drawdown_pct": 12.0,
+    "max_trades_per_day": 3,
+    "cooldown_bars": 3,
+    "max_holding_bars": 96,
+    "session_start_hour": 0,
+    "session_end_hour": 24,
+    "friday_close": true,
+    "friday_close_hour": 20
+  },
+  "exits": {
+    "partial_enabled": true,
+    "partial_pct": 50.0,
+    "partial_at_r": 1.0,
+    "breakeven_enabled": true,
+    "breakeven_trigger_r": 1.0,
+    "breakeven_offset_price": 0.05,
+    "trailing_enabled": true,
+    "trailing_start_r": 1.5,
+    "trailing_atr": 2.0
+  },
+  "validation": {
+    "require_data_since": "2000-01-01",
+    "start_date": "2000-01-01",
+    "train_years": 3,
+    "test_years": 1,
+    "min_train_trades": 15,
+    "min_oos_folds": 3,
+    "min_oos_trades": 30,
+    "min_oos_profit_factor": 1.1,
+    "min_positive_fold_ratio": 0.6,
+    "max_worst_fold_drawdown_pct": 15.0,
+    "min_stress_profit_factor": 1.0,
+    "max_profit_concentration_pct": 70.0,
+    "max_candidates": 12,
+    "optimization_grid": {
+      "breakout_bars": [20, 40, 60],
+      "stop_atr": [2.0, 2.5],
+      "target_r": [2.0, 3.0]
+    },
+    "stress": {
+      "spread_factor": 1.5,
+      "slippage_factor": 2.0,
+      "commission_factor": 1.25
+    }
+  }
+}

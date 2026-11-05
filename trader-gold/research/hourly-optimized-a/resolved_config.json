@@ -1,0 +1,98 @@
+{
+  "account": {
+    "currency": "USD",
+    "initial_balance": 10000.0,
+    "price_value_per_lot": 100.0,
+    "volume_max": 50.0,
+    "volume_min": 0.01,
+    "volume_step": 0.01
+  },
+  "data": {
+    "base_timeframe": "H1",
+    "spread_column_unit": "points",
+    "timezone_offset_hours": 0.0
+  },
+  "execution": {
+    "commission_per_lot_side": 7.0,
+    "default_spread_price": 0.2,
+    "magic": 260119,
+    "max_spread_price": 0.5,
+    "min_stop_distance_price": 0.3,
+    "point_size": 0.01,
+    "slippage_price": 0.05
+  },
+  "exits": {
+    "breakeven_enabled": true,
+    "breakeven_offset_price": 0.05,
+    "breakeven_trigger_r": 1.0,
+    "partial_at_r": 1.0,
+    "partial_enabled": true,
+    "partial_pct": 50.0,
+    "trailing_atr": 2.0,
+    "trailing_enabled": true,
+    "trailing_start_r": 1.5
+  },
+  "risk": {
+    "cooldown_bars": 3,
+    "friday_close": true,
+    "friday_close_hour": 20,
+    "max_daily_loss_pct": 2.0,
+    "max_holding_bars": 96,
+    "max_total_drawdown_pct": 12.0,
+    "max_trades_per_day": 3,
+    "max_weekly_loss_pct": 4.0,
+    "risk_per_trade_pct": 0.25,
+    "session_end_hour": 24,
+    "session_start_hour": 0
+  },
+  "strategy": {
+    "allow_long": true,
+    "allow_short": true,
+    "atr_period": 14,
+    "breakout_bars": 20,
+    "fast_ema": 20,
+    "max_atr_pct": 5.0,
+    "min_atr_pct": 0.0,
+    "signal_timeframe": "H1",
+    "slow_ema": 50,
+    "stop_atr": 2.0,
+    "target_r": 2.0,
+    "trend_timeframe": "AUTO"
+  },
+  "symbol": "XAUUSD",
+  "validation": {
+    "max_candidates": 12,
+    "max_profit_concentration_pct": 70.0,
+    "max_worst_fold_drawdown_pct": 15.0,
+    "min_oos_folds": 3,
+    "min_oos_profit_factor": 1.1,
+    "min_oos_trades": 30,
+    "min_positive_fold_ratio": 0.6,
+    "min_stress_profit_factor": 1.0,
+    "min_train_trades": 5,
+    "optimization_grid": {
+      "breakout_bars": [
+        10,
+        20,
+        30
+      ],
+      "stop_atr": [
+        1.5,
+        2.0
+      ],
+      "target_r": [
+        1.5,
+        2.0
+      ]
+    },
+    "require_data_since": "2000-01-01",
+    "start_date": "2004-01-01",
+    "stress": {
+      "commission_factor": 1.25,
+      "slippage_factor": 2.0,
+      "spread_factor": 1.5
+    },
+    "test_years": 1,
+    "train_years": 3
+  }
+}
